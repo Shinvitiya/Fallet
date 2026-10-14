@@ -43,6 +43,7 @@ For drag and drop changes, also check these flows in Finder:
 - `docs/guide/` — all four in-app guide slides, shown inline in the README.
 - `docs/demo/` — app captures and the short demo video.
 - `Tests/ShakeDetectorTests.swift` — shake detection checks.
+- `Formula/fallet.rb` — source-built Homebrew formula in this repository's custom tap.
 
 Keep generated files in `.build/` and `dist/`; both are ignored by Git. Please avoid adding personal file paths, credentials, or copyrighted assets you cannot redistribute.
 

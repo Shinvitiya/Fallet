@@ -21,6 +21,18 @@ When the first signed release is published, download the universal DMG from [Git
 
 The app appears in the menu bar when it starts. Use its icon to show or hide the shelf.
 
+## Install with Homebrew
+
+Homebrew can build Fallet from source on your own Mac without a Developer ID. This uses the project’s custom tap, rather than Homebrew’s official cask collection:
+
+```sh
+brew tap Shinvitiya/fallet https://github.com/Shinvitiya/Fallet.git
+brew install Shinvitiya/fallet/fallet
+fallet
+```
+
+The first install compiles the app and needs Xcode Command Line Tools (`xcode-select --install`). Homebrew keeps the app in its Cellar; the `fallet` command opens it. This route does not provide a downloadable DMG or put an app icon in Applications.
+
 ## Quick demo
 
 This nine-second clip combines captures from a real two-file run: an empty shelf, two files ready to move, and both files in the Finder destination. Click the preview to watch the MP4.
