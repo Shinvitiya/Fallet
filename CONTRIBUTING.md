@@ -21,16 +21,25 @@ swiftc -module-cache-path .build/module-cache Sources/ShakeDetector.swift Tests/
 .build/shake-detector-tests
 ```
 
+Run the shelf persistence checks with:
+
+```sh
+swiftc -module-cache-path .build/module-cache Sources/ShelfStore.swift Tests/ShelfStoreTests.swift -o .build/shelf-store-tests
+.build/shelf-store-tests
+```
+
 For drag and drop changes, also check these flows in Finder:
 
 1. Drag several files onto the shelf, then move one to a different folder.
 2. Drag the remaining files using **Drag all**.
 3. Copy an item to another volume and confirm the source remains available on the shelf.
 4. Use **Move to**, **Clear**, and **+** with the shelf both visible and hidden.
+5. Rename or move a saved file while Fallet is closed, then reopen it. Delete a different source and disconnect an external drive; check that each state is shown and can be recovered.
 
 ## Project layout
 
 - `Sources/Fallet.swift` — shelf state, Finder drag and drop, menu bar app, and file moving.
+- `Sources/ShelfStore.swift` — persisted paths and bookmarks, source availability, and relinking.
 - `Sources/GlassUI.swift` — shelf appearance and controls.
 - `Sources/GuideWindow.swift` — in-app guide.
 - `Sources/ShakeDetector.swift` — pointer shake detection.
@@ -40,9 +49,11 @@ For drag and drop changes, also check these flows in Finder:
 - `Resources/FalletSystemIcon.png` — opaque full-bleed tile artwork for the macOS app icon.
 - `Scripts/make-icns.swift` — packs the generated icon sizes into an `.icns` resource.
 - `Scripts/make-demo-video.swift` — builds the short MP4 from the checked-in demo captures.
+- `Scripts/capture-persistence-demo.swift` — renders the four README persistence states from isolated test files.
 - `docs/guide/` — all four in-app guide slides, shown inline in the README.
 - `docs/demo/` — app captures and the short demo video.
 - `Tests/ShakeDetectorTests.swift` — shake detection checks.
+- `Tests/ShelfStoreTests.swift` — rename, move, missing source, relinking, and disconnected-volume persistence checks.
 - `Formula/fallet.rb` — source-built Homebrew formula in this repository's custom tap.
 
 Keep generated files in `.build/` and `dist/`; both are ignored by Git. Please avoid adding personal file paths, credentials, or copyrighted assets you cannot redistribute.

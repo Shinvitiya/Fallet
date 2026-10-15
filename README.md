@@ -13,7 +13,7 @@ Fallet is a small macOS menu bar app for keeping files close while you move them
 - Use **Clear** to empty the shelf without deleting the original files. The shelf hides when its last item is moved out.
 - Open **Guide** in the shelf for a short walkthrough.
 
-The shelf remembers its contents and window position between launches. It stores file paths in `~/Library/Application Support/Fallet/shelf.json` and imports existing entries from the former DropShelf build on first launch. Files stay at their original locations until you move them; Fallet does not upload them or use a network service.
+The shelf remembers its contents and window position between launches. It stores each source's last path and a macOS file bookmark in `~/Library/Application Support/Fallet/shelf.json`, and imports existing entries from the former DropShelf build on first launch. Files stay at their original locations until you move them; Fallet does not upload them or use a network service.
 
 ## Download and install
 
@@ -40,6 +40,22 @@ This nine-second clip combines captures from a real two-file run: an empty shelf
 <a href="docs/demo/fallet-demo.mp4"><img src="docs/demo/02-files-on-shelf.png" alt="Watch the Fallet demo: two files ready to move from the shelf" width="540"></a>
 
 [Watch the demo video](docs/demo/fallet-demo.mp4)
+
+## If a saved file moves or disappears
+
+Fallet uses the bookmark to find a file renamed or moved in Finder while the app is closed. If the file was deleted or cannot be found, its entry stays on the shelf with a **Source missing** label and a **Locate** button. A source on a disconnected external drive is labelled **Drive disconnected**; reconnect the drive and Fallet checks again, or use **Locate** if the drive remounts elsewhere. **Drag all** and **Move to** use only files that are currently available.
+
+These captures show an isolated persistence test: a saved file, the same file after a Finder rename and move while Fallet was closed, a deleted source, and a disconnected drive.
+
+| Saved source | Renamed and moved while closed |
+| --- | --- |
+| <img src="docs/demo/04-source-ready.png" alt="A source file ready on the Fallet shelf" width="330"> | <img src="docs/demo/05-source-renamed.png" alt="The renamed file still ready after Fallet reopens" width="330"> |
+
+| Deleted source | Disconnected drive |
+| --- | --- |
+| <img src="docs/demo/06-source-missing.png" alt="Missing source kept on the shelf with a Locate button" width="330"> | <img src="docs/demo/07-drive-disconnected.png" alt="Unavailable external-drive source labelled Drive disconnected" width="330"> |
+
+Entries saved by older versions had paths only. Fallet adds bookmarks for those still accessible; an entry already removed by an older launch cannot be restored automatically.
 
 ## How to use Fallet
 
@@ -74,7 +90,7 @@ open dist/Fallet.app
 
 ## How file moves work
 
-Dropping an item from the shelf into Finder lets Finder perform the drag operation. Finder may copy instead of move depending on the destination and modifier keys. Fallet removes an item from the shelf when the drag reports a move or its original path no longer exists. The **Move to** button uses a native folder picker and moves every item currently on the shelf; if a destination name already exists, it adds a number to the incoming name.
+Dropping an item from the shelf into Finder lets Finder perform the drag operation. Finder may copy instead of move depending on the destination and modifier keys. Fallet removes an item from the shelf when the drag reports a move or the source disappears from an available volume during the drag. The **Move to** button uses a native folder picker and moves every available item currently on the shelf; if a destination name already exists, it adds a number to the incoming name.
 
 ## Contributing
 

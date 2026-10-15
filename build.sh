@@ -21,7 +21,7 @@ swiftc -target "${host_arch}-apple-macosx13.0" -module-cache-path .build/module-
 for arch in arm64 x86_64; do
   swiftc -O -parse-as-library -target "${arch}-apple-macosx13.0" -module-cache-path .build/module-cache \
     -framework AppKit -framework QuartzCore -framework UniformTypeIdentifiers \
-    Sources/Fallet.swift Sources/GlassUI.swift Sources/GuideWindow.swift Sources/ShakeDetector.swift \
+    Sources/Fallet.swift Sources/ShelfStore.swift Sources/GlassUI.swift Sources/GuideWindow.swift Sources/ShakeDetector.swift \
     -o ".build/Fallet-${arch}"
 done
 lipo -create .build/Fallet-arm64 .build/Fallet-x86_64 -output "$app/Contents/MacOS/Fallet"

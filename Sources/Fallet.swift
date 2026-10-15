@@ -1,76 +1,6 @@
 import AppKit
 import UniformTypeIdentifiers
 
-struct ShelfEntry: Codable, Equatable {
-    let id: UUID
-    let path: String
-
-    init(url: URL) {
-        id = UUID()
-        path = url.standardizedFileURL.path
-    }
-
-    var url: URL { URL(fileURLWithPath: path) }
-}
-
-final class ShelfStore {
-    private(set) var entries: [ShelfEntry] = []
-    var onChange: (() -> Void)?
-
-    private let storageURL: URL = {
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Fallet", isDirectory: true)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        return root.appendingPathComponent("shelf.json")
-    }()
-
-    init() {
-        let legacyURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("DropShelf", isDirectory: true)
-            .appendingPathComponent("shelf.json")
-        let currentData = try? Data(contentsOf: storageURL)
-        let data = currentData ?? (try? Data(contentsOf: legacyURL))
-        if let data,
-           let saved = try? JSONDecoder().decode([ShelfEntry].self, from: data) {
-            entries = saved.filter { FileManager.default.fileExists(atPath: $0.path) }
-            if currentData == nil { changed() }
-        }
-    }
-
-    func add(_ urls: [URL]) {
-        let existing = Set(entries.map(\.path))
-        var seen = existing
-        let additions = urls.filter { $0.isFileURL && FileManager.default.fileExists(atPath: $0.path) }
-            .map { ShelfEntry(url: $0) }
-            .filter { seen.insert($0.path).inserted }
-        guard !additions.isEmpty else { return }
-        entries.append(contentsOf: additions)
-        changed()
-    }
-
-    func remove(_ ids: Set<UUID>) {
-        entries.removeAll { ids.contains($0.id) }
-        changed()
-    }
-
-    func removePaths(_ paths: Set<String>) {
-        entries.removeAll { paths.contains($0.path) || !FileManager.default.fileExists(atPath: $0.path) }
-        changed()
-    }
-
-    func clear() {
-        entries.removeAll()
-        changed()
-    }
-
-    private func changed() {
-        if let data = try? JSONEncoder().encode(entries) {
-            try? data.write(to: storageURL, options: .atomic)
-        }
-        onChange?()
-    }
-}
-
 enum FileMover {
     static func move(_ urls: [URL], to directory: URL) -> (moved: [URL], errors: [String]) {
         var moved: [URL] = []
@@ -150,6 +80,7 @@ class DragFilesView: NSView, NSDraggingSource {
     var onPressChanged: ((Bool) -> Void)?
     var onDragStarted: (() -> Void)?
     var onDragCancelled: (() -> Void)?
+    var shouldRemoveMissingURL: ((URL) -> Bool)?
     var showsPressFeedback = false
     private var pendingURLs: [URL] = []
     private var mouseDownEvent: NSEvent?
@@ -206,7 +137,9 @@ class DragFilesView: NSView, NSDraggingSource {
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         let completed = operation.contains(.move)
             ? pendingURLs
-            : pendingURLs.filter { !FileManager.default.fileExists(atPath: $0.path) }
+            : pendingURLs.filter {
+                !FileManager.default.fileExists(atPath: $0.path) && (shouldRemoveMissingURL?($0) ?? true)
+            }
         pendingURLs = []
         mouseDownEvent = nil
         dragStarted = false
@@ -227,17 +160,21 @@ class DragFilesView: NSView, NSDraggingSource {
 final class FileRowView: DragFilesView {
     private let entry: ShelfEntry
     private let removeAction: (UUID) -> Void
+    private let locateAction: (UUID) -> Void
 
-    init(entry: ShelfEntry, width: CGFloat, removeAction: @escaping (UUID) -> Void) {
+    init(entry: ShelfEntry, status: ShelfEntryStatus, width: CGFloat,
+         removeAction: @escaping (UUID) -> Void, locateAction: @escaping (UUID) -> Void) {
         self.entry = entry
         self.removeAction = removeAction
+        self.locateAction = locateAction
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 51))
-        urls = [entry.url]
+        urls = status == .ready ? [entry.url] : []
         wantsLayer = true
         layer?.cornerRadius = 13
         layer?.masksToBounds = true
         layer?.borderWidth = 1
-        layer?.borderColor = ShelfGlassStyle.rowBorder.cgColor
+        layer?.borderColor = (status == .ready ? ShelfGlassStyle.rowBorder
+                              : NSColor.systemOrange.withAlphaComponent(0.55)).cgColor
         layer?.backgroundColor = ShelfGlassStyle.rowFill.cgColor
 
         let iconWell = NSView(frame: NSRect(x: 9, y: 7, width: 37, height: 37))
@@ -247,23 +184,43 @@ final class FileRowView: DragFilesView {
         addSubview(iconWell)
 
         let icon = NSImageView(frame: NSRect(x: 5, y: 5, width: 27, height: 27))
-        icon.image = NSWorkspace.shared.icon(forFile: entry.path)
+        switch status {
+        case .ready: icon.image = NSWorkspace.shared.icon(forFile: entry.path)
+        case .missing: icon.image = NSImage(systemSymbolName: "questionmark.folder.fill", accessibilityDescription: "Missing source")
+        case .volumeUnavailable: icon.image = NSImage(systemSymbolName: "externaldrive.badge.xmark", accessibilityDescription: "Drive disconnected")
+        }
+        if status != .ready { icon.contentTintColor = .systemOrange }
         icon.imageScaling = .scaleProportionallyUpOrDown
         iconWell.addSubview(icon)
 
         let name = NSTextField(labelWithString: entry.url.lastPathComponent)
-        name.frame = NSRect(x: 56, y: 26, width: width - 100, height: 17)
+        name.frame = NSRect(x: 56, y: 26, width: width - (status == .ready ? 100 : 171), height: 17)
         name.font = .systemFont(ofSize: 12, weight: .semibold)
         name.textColor = ShelfGlassStyle.primaryText
         name.lineBreakMode = .byTruncatingMiddle
         addSubview(name)
 
-        let folder = NSTextField(labelWithString: entry.url.deletingLastPathComponent().lastPathComponent)
-        folder.frame = NSRect(x: 56, y: 9, width: width - 100, height: 15)
+        let detail: String
+        switch status {
+        case .ready: detail = entry.url.deletingLastPathComponent().lastPathComponent
+        case .missing: detail = "Source missing"
+        case .volumeUnavailable: detail = "Drive disconnected"
+        }
+        let folder = NSTextField(labelWithString: detail)
+        folder.frame = NSRect(x: 56, y: 9, width: width - (status == .ready ? 100 : 171), height: 15)
         folder.font = .systemFont(ofSize: 10)
-        folder.textColor = ShelfGlassStyle.secondaryText
+        folder.textColor = status == .ready ? ShelfGlassStyle.secondaryText : .systemOrange
         folder.lineBreakMode = .byTruncatingMiddle
         addSubview(folder)
+
+        if status != .ready {
+            let locate = GlassPillButton(frame: NSRect(x: width - 110, y: 11, width: 69, height: 29),
+                                          title: "Locate", symbol: "")
+            locate.toolTip = "Choose the current location of this file or folder"
+            locate.target = self
+            locate.action = #selector(locateClicked)
+            addSubview(locate)
+        }
 
         let remove = GlassPillButton(frame: NSRect(x: width - 37, y: 12, width: 27, height: 27),
                                      title: "", symbol: "xmark")
@@ -271,12 +228,13 @@ final class FileRowView: DragFilesView {
         remove.target = self
         remove.action = #selector(removeClicked)
         addSubview(remove)
-        toolTip = "Drag this file to Finder to move it"
+        toolTip = status == .ready ? "Drag this file to Finder to move it" : detail
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     @objc private func removeClicked() { removeAction(entry.id) }
+    @objc private func locateClicked() { locateAction(entry.id) }
 }
 
 final class ShelfView: NSView {
@@ -285,6 +243,7 @@ final class ShelfView: NSView {
     var onMove: (() -> Void)?
     var onAdd: (() -> Void)?
     var onGuide: (() -> Void)?
+    var onLocate: ((UUID) -> Void)?
     var onQuit: (() -> Void)?
     var onResize: ((CGFloat) -> Void)?
     var onEmptiedByMove: (() -> Void)?
@@ -297,6 +256,7 @@ final class ShelfView: NSView {
     private var hintResetTimer: Timer?
     private var moveFeedbackTimer: Timer?
     private var transientMovedCount: Int?
+    private(set) var isDraggingFiles = false
 
     init(store: ShelfStore) {
         self.store = store
@@ -333,6 +293,8 @@ final class ShelfView: NSView {
             view.removeFromSuperview()
         }
         let entries = store.entries
+        let readyEntries = entries.filter { store.status(for: $0) == .ready }
+        let unavailableCount = entries.count - readyEntries.count
         let rowCount = min(entries.count, 6)
         let height: CGFloat = entries.isEmpty ? 174 : 149 + CGFloat(rowCount) * 55
         frame.size.height = height
@@ -363,7 +325,10 @@ final class ShelfView: NSView {
         title.font = .systemFont(ofSize: 14, weight: .semibold)
         title.textColor = ShelfGlassStyle.primaryText
         header.addSubview(title)
-        let subtitle = NSTextField(labelWithString: entries.isEmpty ? "Ready for files" : "\(entries.count) \(entries.count == 1 ? "file" : "files") ready to move")
+        let summary = unavailableCount == 0
+            ? "\(readyEntries.count) \(readyEntries.count == 1 ? "file" : "files") ready to move"
+            : "\(readyEntries.count) ready · \(unavailableCount) unavailable"
+        let subtitle = NSTextField(labelWithString: entries.isEmpty ? "Ready for files" : summary)
         subtitle.frame = NSRect(x: 57, y: 9, width: 127, height: 15)
         subtitle.font = .systemFont(ofSize: 10)
         subtitle.textColor = ShelfGlassStyle.secondaryText
@@ -388,41 +353,69 @@ final class ShelfView: NSView {
             scroll.scrollerStyle = .overlay
             let document = NSView(frame: NSRect(x: 0, y: 0, width: contentWidth, height: CGFloat(entries.count) * 55))
             for (index, entry) in entries.enumerated() {
-                let row = FileRowView(entry: entry, width: contentWidth) { [weak self] id in
-                    self?.store.remove([id])
-                }
+                let row = FileRowView(entry: entry, status: store.status(for: entry), width: contentWidth,
+                                      removeAction: { [weak self] id in self?.store.remove([id]) },
+                                      locateAction: { [weak self] id in self?.onLocate?(id) })
                 row.frame.origin = NSPoint(x: 0, y: CGFloat(entries.count - index - 1) * 55 + 2)
-                row.onMoved = { [weak self] urls in self?.removeMovedFiles(urls) }
+                row.onMoved = { [weak self] urls in
+                    self?.removeMovedFiles(urls, from: [entry])
+                }
+                row.onDragStarted = { [weak self] in self?.isDraggingFiles = true }
+                row.onDragCancelled = { [weak self] in self?.isDraggingFiles = false }
+                row.shouldRemoveMissingURL = { [weak self] _ in
+                    self?.store.entries.first(where: { $0.id == entry.id }).map {
+                        self?.store.status(for: $0) == .missing
+                    } ?? false
+                }
                 document.addSubview(row)
             }
             scroll.documentView = document
             addSubview(scroll)
 
-            let dragAll = DragAllFilesView(frame: NSRect(x: 14, y: height - 98, width: 150, height: 38))
-            dragAll.urls = entries.map(\.url)
-            dragAll.onMoved = { [weak self] urls in self?.removeMovedFiles(urls, showFeedback: true) }
-            dragAll.onClick = { [weak self] in self?.showDragHint() }
-            dragAll.onPressChanged = { [weak dragAll] pressed in dragAll?.setPressed(pressed) }
-            dragAll.onDragStarted = { [weak self, weak dragAll] in
-                self?.hintResetTimer?.invalidate()
-                dragAll?.setState(.dragging, count: entries.count)
-                self?.dragHintLabel?.stringValue = "Drop in a Finder folder to move all files"
-            }
-            dragAll.onDragCancelled = { [weak self] in self?.showDragHint() }
-            if let movedCount = transientMovedCount {
-                dragAll.setState(.success, count: movedCount, animated: false)
-            } else {
-                dragAll.setState(.ready, count: entries.count, animated: false)
-            }
-            dragAllButton = dragAll
-            addSubview(dragAll)
+            if !readyEntries.isEmpty {
+                let dragAll = DragAllFilesView(frame: NSRect(x: 14, y: height - 98, width: 150, height: 38))
+                dragAll.urls = readyEntries.map(\.url)
+                dragAll.onMoved = { [weak self] urls in
+                    self?.removeMovedFiles(urls, from: readyEntries, showFeedback: true)
+                }
+                dragAll.shouldRemoveMissingURL = { [weak self] url in
+                    self?.store.entries.first(where: { $0.path == url.path }).map {
+                        self?.store.status(for: $0) == .missing
+                    } ?? false
+                }
+                dragAll.onClick = { [weak self] in self?.showDragHint() }
+                dragAll.onPressChanged = { [weak dragAll] pressed in dragAll?.setPressed(pressed) }
+                dragAll.onDragStarted = { [weak self, weak dragAll] in
+                    self?.isDraggingFiles = true
+                    self?.hintResetTimer?.invalidate()
+                    dragAll?.setState(.dragging, count: readyEntries.count)
+                    self?.dragHintLabel?.stringValue = "Drop in a Finder folder to move available files"
+                }
+                dragAll.onDragCancelled = { [weak self] in
+                    self?.isDraggingFiles = false
+                    self?.showDragHint()
+                }
+                if let movedCount = transientMovedCount {
+                    dragAll.setState(.success, count: movedCount, animated: false)
+                } else {
+                    dragAll.setState(.ready, count: readyEntries.count, animated: false)
+                }
+                dragAllButton = dragAll
+                addSubview(dragAll)
 
-            let move = GlassPillButton(frame: NSRect(x: 172, y: height - 98, width: 96, height: 38),
-                                       title: "Move to", symbol: "folder")
-            move.toolTip = "Choose a destination folder"
-            move.target = self
-            move.action = #selector(moveClicked)
-            addSubview(move)
+                let move = GlassPillButton(frame: NSRect(x: 172, y: height - 98, width: 96, height: 38),
+                                           title: "Move to", symbol: "folder")
+                move.toolTip = "Choose a destination folder"
+                move.target = self
+                move.action = #selector(moveClicked)
+                addSubview(move)
+            } else {
+                let notice = NSTextField(labelWithString: "No files ready to move")
+                notice.frame = NSRect(x: 17, y: height - 88, width: 248, height: 18)
+                notice.font = .systemFont(ofSize: 11, weight: .medium)
+                notice.textColor = ShelfGlassStyle.secondaryText
+                addSubview(notice)
+            }
             let clear = GlassPillButton(frame: NSRect(x: 276, y: height - 98, width: 70, height: 38),
                                         title: "Clear", symbol: "xmark")
             clear.toolTip = "Remove all files from shelf without moving them"
@@ -431,7 +424,8 @@ final class ShelfView: NSView {
             addSubview(clear)
 
             let hint = NSTextField(labelWithString: transientMovedCount.map { "Moved \($0) files. Drag the rest when ready." }
-                                         ?? "Hold Drag all and drop in a Finder folder")
+                                         ?? (unavailableCount > 0 ? "Locate missing files or reconnect their drive"
+                                             : "Hold Drag all and drop in a Finder folder"))
             hint.frame = NSRect(x: 17, y: height - 121, width: 326, height: 15)
             hint.font = .systemFont(ofSize: 10)
             hint.textColor = ShelfGlassStyle.secondaryText
@@ -497,21 +491,29 @@ final class ShelfView: NSView {
 
     private func showDragHint() {
         guard transientMovedCount == nil else { return }
-        dragAllButton?.setState(.hint, count: store.entries.count)
+        dragAllButton?.setState(.hint, count: store.entries.filter {
+            store.status(for: $0) == .ready
+        }.count)
         dragHintLabel?.stringValue = "Hold this button, then drag to a Finder folder"
         dragHintLabel?.textColor = ShelfGlassStyle.primaryText
         hintResetTimer?.invalidate()
         hintResetTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: false) { [weak self] _ in
             guard let self else { return }
-            self.dragAllButton?.setState(.ready, count: self.store.entries.count)
-            self.dragHintLabel?.stringValue = "Hold Drag all and drop in a Finder folder"
+            self.dragAllButton?.setState(.ready, count: self.store.entries.filter {
+                self.store.status(for: $0) == .ready
+            }.count)
+            self.dragHintLabel?.stringValue = self.store.entries.contains {
+                self.store.status(for: $0) != .ready
+            } ? "Locate missing files or reconnect their drive" : "Hold Drag all and drop in a Finder folder"
             self.dragHintLabel?.textColor = ShelfGlassStyle.secondaryText
         }
     }
 
-    private func removeMovedFiles(_ urls: [URL], showFeedback: Bool = false) {
+    private func removeMovedFiles(_ urls: [URL], from sourceEntries: [ShelfEntry], showFeedback: Bool = false) {
+        isDraggingFiles = false
         if showFeedback { transientMovedCount = urls.count }
-        store.removePaths(Set(urls.map(\.path)))
+        let movedPaths = Set(urls.map(\.path))
+        store.remove(Set(sourceEntries.filter { movedPaths.contains($0.path) }.map(\.id)))
         guard showFeedback else {
             if store.entries.isEmpty { onEmptiedByMove?() }
             return
@@ -543,6 +545,7 @@ final class ShelfView: NSView {
     }
 }
 
+#if !FALLET_CAPTURE
 @main
 final class FalletApp: NSObject, NSApplicationDelegate {
     private let store = ShelfStore()
@@ -552,6 +555,7 @@ final class FalletApp: NSObject, NSApplicationDelegate {
     private var guideWindow: GuideWindow?
     private var activePicker: NSOpenPanel?
     private var shakeTimer: Timer?
+    private var sourceRefreshTimer: Timer?
     private var shakeDetector = ShakeDetector()
     private var lastShakeReveal: TimeInterval = -100
 
@@ -591,6 +595,7 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         shelfView.onHide = { [weak self] in self?.panel.orderOut(nil) }
         shelfView.onEmptiedByMove = { [weak self] in self?.panel.orderOut(nil) }
         shelfView.onAdd = { [weak self] in self?.chooseFiles() }
+        shelfView.onLocate = { [weak self] id in self?.locateSource(id) }
         shelfView.onGuide = { [weak self] in self?.showGuide() }
         shelfView.onMove = { [weak self] in self?.chooseDestination() }
         shelfView.onQuit = { NSApplication.shared.terminate(nil) }
@@ -601,10 +606,15 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         restorePanelPosition()
         panel.orderFrontRegardless()
         startShakePolling()
+        sourceRefreshTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            guard let self, !self.shelfView.isDraggingFiles else { return }
+            self.store.refresh()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         shakeTimer?.invalidate()
+        sourceRefreshTimer?.invalidate()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -614,7 +624,10 @@ final class FalletApp: NSObject, NSApplicationDelegate {
 
     @objc private func toggleShelf() {
         if panel.isVisible { panel.orderOut(nil) }
-        else { panel.orderFrontRegardless() }
+        else {
+            store.refresh()
+            panel.orderFrontRegardless()
+        }
     }
 
     private func showGuide() {
@@ -671,6 +684,7 @@ final class FalletApp: NSObject, NSApplicationDelegate {
     }
 
     private func showShelf(near pointer: NSPoint) {
+        store.refresh()
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         let size = panel.frame.size
@@ -705,7 +719,9 @@ final class FalletApp: NSObject, NSApplicationDelegate {
     }
 
     private func chooseDestination() {
-        guard !store.entries.isEmpty else { return }
+        store.refresh()
+        let readyEntries = store.entries.filter { store.status(for: $0) == .ready }
+        guard !readyEntries.isEmpty else { return }
         let picker = NSOpenPanel()
         picker.canChooseFiles = false
         picker.canChooseDirectories = true
@@ -714,13 +730,36 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         picker.prompt = "Move Files Here"
         presentPicker(picker) { [weak self] result in
             guard result == .OK, let directory = picker.url, let self else { return }
-            let result = FileMover.move(self.store.entries.map(\.url), to: directory)
+            self.store.refresh()
+            let currentReady = self.store.entries.filter { self.store.status(for: $0) == .ready }
+            let result = FileMover.move(currentReady.map(\.url), to: directory)
             self.store.removePaths(Set(result.moved.map(\.path)))
             if self.store.entries.isEmpty { self.panel.orderOut(nil) }
             if !result.errors.isEmpty {
                 let alert = NSAlert()
                 alert.messageText = "Some files could not be moved"
                 alert.informativeText = result.errors.joined(separator: "\n")
+                alert.runModal()
+            }
+        }
+    }
+
+    private func locateSource(_ id: UUID) {
+        guard let entry = store.entries.first(where: { $0.id == id }) else { return }
+        let picker = NSOpenPanel()
+        picker.canChooseFiles = true
+        picker.canChooseDirectories = true
+        picker.allowsMultipleSelection = false
+        picker.prompt = "Relink"
+        picker.message = "Choose the current location of \(entry.url.lastPathComponent)."
+        let parent = entry.url.deletingLastPathComponent()
+        if FileManager.default.fileExists(atPath: parent.path) { picker.directoryURL = parent }
+        presentPicker(picker) { [weak self] result in
+            guard result == .OK, let url = picker.url, let self else { return }
+            if !self.store.relink(id, to: url) {
+                let alert = NSAlert()
+                alert.messageText = "Could not relink this item"
+                alert.informativeText = "Choose an existing file or folder that is not already on the shelf."
                 alert.runModal()
             }
         }
@@ -760,3 +799,4 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         return image
     }
 }
+#endif
