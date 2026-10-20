@@ -12,15 +12,15 @@ GitHub's [token scope documentation](https://docs.github.com/en/actions/concepts
 
 ## Publish the first free release
 
-The current bundle version is `1.6`. After this work is committed, the tap repository and secret exist, and `main` has been pushed, run these commands **from this repository**:
+The current bundle version is `1.6.1`. After this work is committed, the tap repository and secret exist, and `main` has been pushed, run these commands **from this repository**:
 
 ```sh
-python3 Scripts/version.py check v1.6
+python3 Scripts/version.py check v1.6.1
 zsh Scripts/test.sh
 zsh build.sh
 git push origin main
-git tag v1.6
-git push origin v1.6
+git tag v1.6.1
+git push origin v1.6.1
 ```
 
 Never force-push or reuse a release tag. The older `source-v1.5` tag stays in place for existing installs. New releases use `v<version>` tags.
@@ -42,7 +42,7 @@ git push origin v1.7
 
 The tag must point to a commit on `main`. CI validates that tag, both version fields, all offline tests, both executable architectures, and the ad-hoc signature. It downloads the tag's GitHub source archive, computes its SHA-256, and updates the source repository's existing `Formula/fallet.rb` and the dedicated tap's `Formula/fallet.rb`. Each API update compares the current formula to the proposed one; reruns skip unchanged files and refuse to roll a formula back to an older version. The workflow checks the committed formula after each update. Only after both repositories succeed does it publish a stable GitHub Release as **Latest**. The app checks that release through GitHub's `releases/latest` API, so it cannot advertise a version before the Homebrew formula is available.
 
-If a step fails, inspect the **Publish free Homebrew release** Actions run, fix the problem, and rerun that job. If GitHub rejected the workflow file before creating jobs, push the workflow fix to `main`, then use **Actions → Publish free Homebrew release → Run workflow** with `main` selected and the existing tag (for example `v1.6`) in the `tag` input. Do not move or recreate the tag. A failed run leaves the release unpublished. The workflow does not overwrite a tag or create duplicate formula commits on rerun. If the release already exists as a draft, a successful rerun publishes it after the formula checks. A prerelease is rejected.
+If a step fails, inspect the **Publish free Homebrew release** Actions run, fix the problem, and rerun that job. If GitHub rejected the workflow file before creating jobs, push the workflow fix to `main`, then use **Actions → Publish free Homebrew release → Run workflow** with `main` selected and the existing tag in the `tag` input. Do not move or recreate the tag. If the tagged code needs a fix, commit the fix, increment the bundle version, and publish a new tag. A failed run leaves the release unpublished. The workflow does not overwrite a tag or create duplicate formula commits on rerun. If the release already exists as a draft, a successful rerun publishes it after the formula checks. A prerelease is rejected.
 
 ## Existing Homebrew installations
 

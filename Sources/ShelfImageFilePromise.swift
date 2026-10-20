@@ -43,10 +43,12 @@ final class ShelfImageFilePromise: NSObject, NSFilePromiseProviderDelegate {
         do {
             try FileManager.default.copyItem(at: sourceURL, to: url)
             completionHandler(nil)
-            DispatchQueue.main.async {
+            let finish = {
                 self.onWritten(self.sourceURL)
                 Self.active.removeValue(forKey: self.id)
             }
+            if Thread.isMainThread { finish() }
+            else { DispatchQueue.main.async(execute: finish) }
         } catch {
             completionHandler(error)
             DispatchQueue.main.async { Self.active.removeValue(forKey: self.id) }
