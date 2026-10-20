@@ -90,17 +90,20 @@ private final class ShelfActionRow: NSButton {
 private final class ShelfActionMenuView: NSView {
     let titles: (String, String)
     let groups: ([ShelfActionOption], [ShelfActionOption])
+    let singleList: Bool
     let onSelect: (() -> Void) -> Void
     private var selectedGroup = 0
     private let backdrop = NSVisualEffectView()
 
-    init(titles: (String, String), groups: ([ShelfActionOption], [ShelfActionOption]),
+    init(titles: (String, String), groups: ([ShelfActionOption], [ShelfActionOption]), singleList: Bool,
          onSelect: @escaping (() -> Void) -> Void) {
         self.titles = titles
         self.groups = groups
+        self.singleList = singleList
         self.onSelect = onSelect
-        let rows = max(groups.0.count, groups.1.count)
-        super.init(frame: NSRect(x: 0, y: 0, width: 296, height: 74 + CGFloat(rows) * 52))
+        let rows = singleList ? groups.0.count : max(groups.0.count, groups.1.count)
+        super.init(frame: NSRect(x: 0, y: 0, width: 296,
+                                 height: (singleList ? 28 : 74) + CGFloat(rows) * 52))
         wantsLayer = true
         layer?.cornerRadius = 18
         layer?.masksToBounds = true
@@ -131,28 +134,30 @@ private final class ShelfActionMenuView: NSView {
         tint.layer?.cornerRadius = 18
         addSubview(tint)
 
-        let tabs = NSView(frame: NSRect(x: 12, y: height - 48, width: 272, height: 33))
-        tabs.wantsLayer = true
-        tabs.layer?.cornerRadius = 11
-        tabs.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
-        addSubview(tabs)
-        for index in 0...1 {
-            let tab = NSButton(frame: NSRect(x: CGFloat(index) * 136 + 2, y: 3, width: 132, height: 27))
-            tab.title = index == 0 ? titles.0 : titles.1
-            tab.font = .systemFont(ofSize: 10, weight: .semibold)
-            tab.isBordered = false
-            tab.contentTintColor = .white
-            tab.wantsLayer = true
-            tab.layer?.cornerRadius = 9
-            tab.layer?.backgroundColor = NSColor.white.withAlphaComponent(index == selectedGroup ? 0.22 : 0.02).cgColor
-            tab.tag = index
-            tab.target = self
-            tab.action = #selector(switchTab(_:))
-            tabs.addSubview(tab)
+        if !singleList {
+            let tabs = NSView(frame: NSRect(x: 12, y: height - 48, width: 272, height: 33))
+            tabs.wantsLayer = true
+            tabs.layer?.cornerRadius = 11
+            tabs.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.18).cgColor
+            addSubview(tabs)
+            for index in 0...1 {
+                let tab = NSButton(frame: NSRect(x: CGFloat(index) * 136 + 2, y: 3, width: 132, height: 27))
+                tab.title = index == 0 ? titles.0 : titles.1
+                tab.font = .systemFont(ofSize: 10, weight: .semibold)
+                tab.isBordered = false
+                tab.contentTintColor = .white
+                tab.wantsLayer = true
+                tab.layer?.cornerRadius = 9
+                tab.layer?.backgroundColor = NSColor.white.withAlphaComponent(index == selectedGroup ? 0.22 : 0.02).cgColor
+                tab.tag = index
+                tab.target = self
+                tab.action = #selector(switchTab(_:))
+                tabs.addSubview(tab)
+            }
         }
 
         for (index, option) in options.enumerated() {
-            let row = ShelfActionRow(frame: NSRect(x: 12, y: height - 106 - CGFloat(index) * 52,
+            let row = ShelfActionRow(frame: NSRect(x: 12, y: height - (singleList ? 58 : 106) - CGFloat(index) * 52,
                                               width: 272, height: 46), option: option,
                                      onSelect: onSelect)
             addSubview(row)
@@ -169,14 +174,14 @@ final class ShelfActionPopover {
     private var popover: NSPopover?
 
     func show(from anchor: NSView, titles: (String, String),
-              groups: ([ShelfActionOption], [ShelfActionOption])) {
+              groups: ([ShelfActionOption], [ShelfActionOption]), singleList: Bool = false) {
         popover?.close()
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = !ShelfGlassStyle.reduceMotion
         popover.appearance = NSAppearance(named: .darkAqua)
         let controller = NSViewController()
-        let view = ShelfActionMenuView(titles: titles, groups: groups) { [weak popover] callback in
+        let view = ShelfActionMenuView(titles: titles, groups: groups, singleList: singleList) { [weak popover] callback in
             popover?.close()
             callback()
         }

@@ -6,18 +6,18 @@ Fallet is a small macOS menu bar app for keeping files, images, links, and text 
 
 ## What it does
 
-- Drag files or folders from Finder onto the shelf. The shelf holds references to their original locations; adding them does not copy or move them. You can also drag images directly from websites onto the shelf, see their thumbnails, then drag them into any Finder folder or bundle them into a ZIP with **Create ZIP**. Drop links and text on the shelf too.
+- Drag files or folders from Finder onto the shelf. The shelf holds references to their original locations; adding them does not copy or move them. Images from Finder and websites show thumbnails. Drag website images into any Finder folder or bundle them into a ZIP with **Create ZIP**. Drop links and text on the shelf too.
 - Open the shelf from its menu bar icon, press **Control–Option–Space**, or shake the pointer while dragging files in Finder to bring it near the pointer. You can also drop items onto its menu bar icon or the small target that appears below the notch while dragging on a MacBook with a notch.
 - Drag an individual item from the shelf into a Finder folder. Use **Drag all** when everything belongs in the same folder.
 - The shelf groups files and folders above text and links, even if you add the text first. Move Up and Move Down reorder within a group.
-- Use **Move to** to choose a destination folder. Click an item to preview it; its context menu offers rename, reorder, and sharing.
-- Open **More actions** (the ellipsis in the header) for the compact **Collect** and **Actions** menu. Collect adds files, clipboard contents, text, or links. Actions can share by AirDrop or another macOS service, or create a ZIP. Right-click an image row for its Resize Image and Extract Text actions.
+- Use **Move to** to choose a destination folder. Click the **⋮** button beside an item's thumbnail to preview, rename, reorder, or share it.
+- Open **More actions** (the ellipsis in the header) for one list of ways to add files, clipboard contents, text, or links, share by AirDrop or another macOS service, and create a ZIP. The **⋮** button on an image row also offers Resize Image and Extract Text.
 - Use **Clear** to empty the shelf without deleting original files; Fallet-generated images and temporary ZIPs are discarded. The shelf hides when its last item is moved out.
 - Open **More actions → How to Use** for a short walkthrough. Right-click the menu bar icon for **Quit Fallet**.
 
 In apps that offer macOS Services, select an item and choose **Services → Add to Fallet** to send it to the shelf. This is a Services command, not a Share extension. **Create ZIP** bundles any mix of shelf files, folders, and website images, then adds the archive to the shelf. Drag it to a Finder folder or use **Move to** to keep it. Fallet permanently deletes ZIPs still in its temporary folder when you remove them, clear the shelf, or quit the app. ZIPs moved out of that folder remain yours.
 
-To resize an image or use OCR, right-click its shelf row and choose **More Actions… → Actions**. **Resize Image…** asks for a width and save location, then adds the resized PNG to the shelf. **Extract Text** reads text locally with Apple's Vision framework and adds it to the shelf as a text item.
+To resize an image or use OCR, click **⋮** beside its thumbnail and choose **Actions → Resize Image…** or **Extract Text**. Resize asks for a width and save location, then adds the resized PNG to the shelf. OCR reads text locally with Apple's Vision framework and adds it to the shelf as a text item.
 
 The shelf remembers regular contents and window position between launches; temporary ZIPs are discarded on quit. It stores each source's last path and a macOS file bookmark in `~/Library/Application Support/Fallet/shelf.json`, and imports existing entries from the former DropShelf build on first launch. Files stay at their original locations until you move them; Fallet does not upload them or use a network service.
 
@@ -69,7 +69,7 @@ These are all eight slides from the guide built into the app. Click a slide to s
 
 ### 1. Collect files
 
-<a href="docs/guide/01-collect.png"><img src="docs/guide/01-collect.png" alt="Guide slide 1: open Fallet from the menu bar or by shaking while dragging, then collect files on the shelf" width="720"></a>
+<a href="docs/guide/01-collect.png"><img src="docs/guide/01-collect.png" alt="Guide slide 1: open Fallet from the menu bar, with Control–Option–Space, or by shaking while dragging Finder files" width="720"></a>
 
 ### 2. Split a batch between destinations
 
@@ -77,7 +77,7 @@ These are all eight slides from the guide built into the app. Click a slide to s
 
 ### 3. Take website images into Finder
 
-<a href="docs/guide/03-web-images.png"><img src="docs/guide/03-web-images.png" alt="Guide slide 3: drag an image directly from a webpage into Fallet and then into any Finder folder" width="720"></a>
+<a href="docs/guide/03-web-images.png"><img src="docs/guide/03-web-images.png" alt="Guide slide 3: drag a website image into Fallet and then into any Finder folder; Finder images also show thumbnails" width="720"></a>
 
 ### 4. Bundle files, folders, and images into a ZIP
 
@@ -89,7 +89,7 @@ These are all eight slides from the guide built into the app. Click a slide to s
 
 ### 6. Resize an image or extract text
 
-<a href="docs/guide/06-item-tools.png"><img src="docs/guide/06-item-tools.png" alt="Guide slide 6: right-click an image for Resize Image or Extract Text, with preview and sharing available from its menu" width="720"></a>
+<a href="docs/guide/06-item-tools.png"><img src="docs/guide/06-item-tools.png" alt="Guide slide 6: click the three-dot button beside an image for Resize Image or Extract Text; the Item tab has preview and rename" width="720"></a>
 
 ### 7. Move the whole batch
 

@@ -233,17 +233,16 @@ class DragFilesView: NSView, NSDraggingSource {
 }
 
 final class FileRowView: DragFilesView {
-    private static let thumbnailCache = NSCache<NSString, NSImage>()
+    private static let thumbnailCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 128
+        return cache
+    }()
     private let entry: ShelfEntry
     private let removeAction: (UUID) -> Void
     private var isRemoving = false
     private let locateAction: (UUID) -> Void
-    var onPreview: (() -> Void)?
-    var onRename: (() -> Void)?
-    var onShare: (() -> Void)?
-    var onMoveUp: (() -> Void)?
-    var onMoveDown: (() -> Void)?
-    var onActions: (() -> Void)?
+    var onActions: ((NSView) -> Void)?
 
     init(entry: ShelfEntry, status: ShelfEntryStatus, width: CGFloat,
          removeAction: @escaping (UUID) -> Void, locateAction: @escaping (UUID) -> Void) {
@@ -267,10 +266,21 @@ final class FileRowView: DragFilesView {
                               : NSColor.systemOrange.withAlphaComponent(0.55)).cgColor
         layer?.backgroundColor = ShelfGlassStyle.rowFill.cgColor
 
-        let thumbnail = status == .ready && entry.kind == .image ? Self.thumbnail(at: entry.url) : nil
+        let more = GlassPillButton(frame: NSRect(x: 6, y: 12, width: 23, height: 27),
+                                   title: "⋮", symbol: "")
+        more.font = .systemFont(ofSize: 17, weight: .bold)
+        more.imagePosition = .noImage
+        more.toolTip = "More actions for this item"
+        more.setAccessibilityLabel("More actions for \(entry.title)")
+        more.target = self
+        more.action = #selector(actionsClicked(_:))
+        addSubview(more)
+
+        let showsImage = entry.kind == .image || entry.kind == .file
+        let thumbnail = status == .ready && showsImage ? Self.thumbnail(at: entry.url) : nil
         let iconWell = NSView(frame: thumbnail == nil
-            ? NSRect(x: 9, y: 7, width: 37, height: 37)
-            : NSRect(x: 7, y: 4, width: 43, height: 43))
+            ? NSRect(x: 37, y: 7, width: 37, height: 37)
+            : NSRect(x: 34, y: 4, width: 43, height: 43))
         iconWell.wantsLayer = true
         iconWell.layer?.cornerRadius = 10
         iconWell.layer?.masksToBounds = true
@@ -282,7 +292,7 @@ final class FileRowView: DragFilesView {
         switch status {
         case .ready:
             switch entry.kind {
-            case .file, .archive: icon.image = NSWorkspace.shared.icon(forFile: entry.path)
+            case .file, .archive: icon.image = thumbnail ?? NSWorkspace.shared.icon(forFile: entry.path)
             case .image: icon.image = thumbnail ?? NSWorkspace.shared.icon(forFile: entry.path)
             case .link: icon.image = NSImage(systemSymbolName: "link", accessibilityDescription: "Link")
             case .text: icon.image = NSImage(systemSymbolName: "text.alignleft", accessibilityDescription: "Text")
@@ -295,7 +305,7 @@ final class FileRowView: DragFilesView {
         iconWell.addSubview(icon)
 
         let name = NSTextField(labelWithString: entry.title)
-        name.frame = NSRect(x: 56, y: 26, width: width - (status == .ready ? 100 : 171), height: 17)
+        name.frame = NSRect(x: 85, y: 26, width: width - (status == .ready ? 129 : 200), height: 17)
         name.font = .systemFont(ofSize: 12, weight: .semibold)
         name.textColor = ShelfGlassStyle.primaryText
         name.lineBreakMode = .byTruncatingMiddle
@@ -315,7 +325,7 @@ final class FileRowView: DragFilesView {
         case .volumeUnavailable: detail = "Drive disconnected"
         }
         let folder = NSTextField(labelWithString: detail)
-        folder.frame = NSRect(x: 56, y: 9, width: width - (status == .ready ? 100 : 171), height: 15)
+        folder.frame = NSRect(x: 85, y: 9, width: width - (status == .ready ? 129 : 200), height: 15)
         folder.font = .systemFont(ofSize: 10)
         folder.textColor = status == .ready ? ShelfGlassStyle.secondaryText : .systemOrange
         folder.lineBreakMode = .byTruncatingMiddle
@@ -339,33 +349,19 @@ final class FileRowView: DragFilesView {
         addSubview(remove)
         toolTip = status == .ready && entry.kind == .archive
             ? "Drag to Finder or use Move to. Clear or Quit permanently deletes this ZIP."
-            : status == .ready ? "Drag to another app, or right-click for more options" : detail
-        let context = NSMenu()
-        let preview = context.addItem(withTitle: "Preview", action: #selector(previewClicked), keyEquivalent: "")
-        preview.target = self
-        if entry.isFileLike {
-            let rename = context.addItem(withTitle: "Rename…", action: #selector(renameClicked), keyEquivalent: "")
-            rename.target = self
-        }
-        context.addItem(.separator())
-        let up = context.addItem(withTitle: "Move Up", action: #selector(moveUpClicked), keyEquivalent: "")
-        up.target = self
-        let down = context.addItem(withTitle: "Move Down", action: #selector(moveDownClicked), keyEquivalent: "")
-        down.target = self
-        context.addItem(.separator())
-        let share = context.addItem(withTitle: "Share…", action: #selector(shareClicked), keyEquivalent: "")
-        share.target = self
-        let actions = context.addItem(withTitle: "More Actions…", action: #selector(actionsClicked), keyEquivalent: "")
-        actions.target = self
-        menu = context
+            : status == .ready ? "Drag this item, or click ⋮ for more actions" : detail
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    override func rightMouseDown(with event: NSEvent) {}
+
     private static func thumbnail(at url: URL) -> NSImage? {
-        let key = url.standardizedFileURL.path as NSString
+        let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        let key = "\(url.standardizedFileURL.path)|\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(values?.fileSize ?? 0)" as NSString
         if let cached = thumbnailCache.object(forKey: key) { return cached }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              (CGImageSourceGetType(source) as String?) != "com.adobe.pdf",
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
@@ -391,12 +387,7 @@ final class FileRowView: DragFilesView {
         }
     }
     @objc private func locateClicked() { locateAction(entry.id) }
-    @objc private func previewClicked() { onPreview?() }
-    @objc private func renameClicked() { onRename?() }
-    @objc private func shareClicked() { onShare?() }
-    @objc private func moveUpClicked() { onMoveUp?() }
-    @objc private func moveDownClicked() { onMoveDown?() }
-    @objc private func actionsClicked() { onActions?() }
+    @objc private func actionsClicked(_ sender: NSView) { onActions?(sender) }
 }
 
 final class ShelfView: NSView {
@@ -404,9 +395,6 @@ final class ShelfView: NSView {
     var onHide: (() -> Void)?
     var onMove: (() -> Void)?
     var onLocate: ((UUID) -> Void)?
-    var onPreview: ((ShelfEntry) -> Void)?
-    var onRename: ((ShelfEntry) -> Void)?
-    var onShare: ((ShelfEntry, NSView) -> Void)?
     var onTools: ((ShelfEntry?, NSView) -> Void)?
     var onResize: ((CGFloat) -> Void)?
     var onEmptiedByMove: (() -> Void)?
@@ -553,18 +541,8 @@ final class ShelfView: NSView {
                     row.onPromisedImageWritten = { [weak self] url in
                         self?.removeMovedFiles([url], from: [entry])
                     }
-                    row.onClick = { [weak self] in self?.onPreview?(entry) }
-                    row.onPreview = { [weak self] in self?.onPreview?(entry) }
-                    row.onRename = { [weak self] in self?.onRename?(entry) }
-                    row.onShare = { [weak self, weak row] in
-                        guard let row else { return }
-                        self?.onShare?(entry, row)
-                    }
-                    row.onMoveUp = { [weak self] in self?.store.moveEntry(entry.id, by: -1) }
-                    row.onMoveDown = { [weak self] in self?.store.moveEntry(entry.id, by: 1) }
-                    row.onActions = { [weak self, weak row] in
-                        guard let row else { return }
-                        self?.onTools?(entry, row)
+                    row.onActions = { [weak self] anchor in
+                        self?.onTools?(entry, anchor)
                     }
                     row.onDragStarted = { [weak self] in self?.isDraggingFiles = true }
                     row.onDragCancelled = { [weak self] in self?.isDraggingFiles = false }
@@ -904,9 +882,6 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         shelfView.onHide = { [weak self] in self?.panel.orderOut(nil) }
         shelfView.onEmptiedByMove = { [weak self] in self?.panel.orderOut(nil) }
         shelfView.onLocate = { [weak self] id in self?.locateSource(id) }
-        shelfView.onPreview = { [weak self] entry in self?.preview(entry) }
-        shelfView.onRename = { [weak self] entry in self?.rename(entry) }
-        shelfView.onShare = { [weak self] entry, anchor in self?.share([entry], from: anchor) }
         shelfView.onTools = { [weak self] entry, anchor in self?.showTools(for: entry, from: anchor) }
         shelfView.onMove = { [weak self] in self?.chooseDestination() }
         shelfView.onPositionChanged = { point in
@@ -1252,8 +1227,12 @@ private extension FalletApp {
                 self?.extractText(from: image)
             })
         }
-        actionPopover.show(from: anchor, titles: (target == nil ? "Collect" : "Item", "Actions"),
-                           groups: (collect, actions))
+        if target == nil {
+            let options = Array(collect.prefix(5)) + actions + Array(collect.suffix(1))
+            actionPopover.show(from: anchor, titles: ("", ""), groups: (options, []), singleList: true)
+        } else {
+            actionPopover.show(from: anchor, titles: ("Item", "Actions"), groups: (collect, actions))
+        }
     }
 
     func addTypedContent(as kind: ShelfEntryKind) {
@@ -1436,8 +1415,9 @@ private extension FalletApp {
     }
 
     func isImageFile(_ url: URL) -> Bool {
-        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
-        return type.conforms(to: .image)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }
+        return CGImageSourceGetCount(source) > 0
+            && (CGImageSourceGetType(source) as String?) != "com.adobe.pdf"
     }
 
     func showError(_ title: String, _ detail: String) {

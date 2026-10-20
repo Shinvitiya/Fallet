@@ -10,18 +10,22 @@ private struct GuidePage {
     var optionsHeading: String? = nil
     var firstOptionTitle: String? = nil
     var secondOptionTitle: String? = nil
+    var thirdOptionTitle: String? = nil
+    var thirdStep: String? = nil
 }
 
 private let guidePages: [GuidePage] = [
     GuidePage(
         eyebrow: "01  •  OPEN & COLLECT",
         title: "Your shelf is one gesture away.",
-        summary: "Use the menu bar, Control–Option–Space, or a pointer shake while dragging Finder files. You can also drop onto the menu bar icon or notch target.",
+        summary: "Open Fallet three ways. You can also drop files onto its menu bar icon or the notch target.",
         firstStep: "Click the Fallet icon.",
-        secondStep: "Wiggle while dragging Finder files.",
-        optionsHeading: "TWO WAYS TO OPEN THE SHELF",
+        secondStep: "Press Control–Option–Space.",
+        optionsHeading: "THREE WAYS TO OPEN THE SHELF",
         firstOptionTitle: "Menu bar",
-        secondOptionTitle: "While dragging"
+        secondOptionTitle: "Keyboard shortcut",
+        thirdOptionTitle: "While dragging",
+        thirdStep: "Wiggle while dragging Finder files."
     ),
     GuidePage(
         eyebrow: "02  •  SPLIT A BATCH",
@@ -33,7 +37,7 @@ private let guidePages: [GuidePage] = [
     GuidePage(
         eyebrow: "03  •  WEB IMAGES",
         title: "Take website images into Finder.",
-        summary: "Drag an image straight from a webpage onto Fallet. Its thumbnail stays visible so you can tell images apart.",
+        summary: "Drag an image straight from a webpage onto Fallet. Finder images get thumbnails too, so every image is easy to recognize.",
         firstStep: "Drag a website image onto the shelf.",
         secondStep: "Drag it from Fallet into any Finder folder."
     ),
@@ -41,15 +45,15 @@ private let guidePages: [GuidePage] = [
         eyebrow: "04  •  ZIP ANY FILES",
         title: "Bundle files and images into one ZIP.",
         summary: "Create ZIP works with files, folders, and website images on your shelf. You can mix them in one archive.",
-        firstStep: "Open More actions → Actions → Create ZIP.",
+        firstStep: "Open More actions → Create ZIP.",
         secondStep: "Drag the ZIP to Finder. Clear or Quit deletes it if left here."
     ),
     GuidePage(
         eyebrow: "05  •  TEXT & LINKS",
         title: "Keep more than files close.",
         summary: "Paste text and links, type your own, or use Services → Add to Fallet in supported apps. They sit below files and can be dragged out later.",
-        firstStep: "Choose Paste from Clipboard in Collect.",
-        secondStep: "Use Add Text or Add Link in Collect.",
+        firstStep: "Choose Paste from Clipboard in More actions.",
+        secondStep: "Use Add Text or Add Link in More actions.",
         optionsHeading: "WAYS TO ADD CONTENT",
         firstOptionTitle: "Paste",
         secondOptionTitle: "Write or link"
@@ -57,7 +61,7 @@ private let guidePages: [GuidePage] = [
     GuidePage(
         eyebrow: "06  •  IMAGE TOOLS",
         title: "Resize images or read their text.",
-        summary: "Right-click an image → More Actions → Actions. Click an item to preview; its menu also has rename, reorder, and Share via AirDrop.",
+        summary: "Click an image’s three-dot button, then Actions for Resize Image or Extract Text. Item has Preview, Rename, and Reorder.",
         firstStep: "Enter a width, then choose where to save.",
         secondStep: "OCR adds recognized text to the shelf.",
         optionsHeading: "CHOOSE AN IMAGE ACTION",
@@ -349,9 +353,10 @@ final class GuideView: NSView {
         card.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.075).cgColor
         card.layer?.borderWidth = 1
         card.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.17).cgColor
-        card.addSubview(label(title, frame: NSRect(x: 12, y: 31, width: frame.width - 24, height: 16),
+        card.addSubview(label(title, frame: NSRect(x: 12, y: frame.height - 23, width: frame.width - 24, height: 16),
                               size: 11, weight: .semibold))
-        card.addSubview(label(detail, frame: NSRect(x: 12, y: 11, width: frame.width - 24, height: 16),
+        card.addSubview(label(detail, frame: NSRect(x: 12, y: 8, width: frame.width - 24,
+                                                    height: frame.height - 35),
                               size: 10, color: NSColor(calibratedWhite: 1, alpha: 0.75)))
         return card
     }
@@ -390,16 +395,20 @@ final class GuideView: NSView {
             addSubview(label(optionsHeading, frame: NSRect(x: 30, y: 137, width: 350, height: 16),
                              size: 10, weight: .bold,
                              color: NSColor(calibratedRed: 0.58, green: 0.75, blue: 1, alpha: 1)))
-            let hasOr = currentPage == 0
-            addSubview(optionCard(title: page.firstOptionTitle ?? "Option 1", detail: page.firstStep,
-                                  frame: NSRect(x: 30, y: 76, width: hasOr ? 224 : 240, height: 54)))
-            if hasOr {
-                addSubview(label("OR", frame: NSRect(x: 265, y: 94, width: 30, height: 18), size: 10,
-                                 weight: .bold, color: NSColor(calibratedWhite: 1, alpha: 0.56), alignment: .center))
+            if let thirdTitle = page.thirdOptionTitle, let thirdStep = page.thirdStep {
+                let titles = [page.firstOptionTitle ?? "Menu bar", page.secondOptionTitle ?? "Shortcut", thirdTitle]
+                let details = [page.firstStep, page.secondStep, thirdStep]
+                for index in 0..<3 {
+                    addSubview(optionCard(title: titles[index], detail: details[index],
+                                          frame: NSRect(x: 30 + CGFloat(index) * 170, y: 68,
+                                                        width: 160, height: 62)))
+                }
+            } else {
+                addSubview(optionCard(title: page.firstOptionTitle ?? "Option 1", detail: page.firstStep,
+                                      frame: NSRect(x: 30, y: 68, width: 240, height: 62)))
+                addSubview(optionCard(title: page.secondOptionTitle ?? "Option 2", detail: page.secondStep,
+                                      frame: NSRect(x: 290, y: 68, width: 240, height: 62)))
             }
-            addSubview(optionCard(title: page.secondOptionTitle ?? "Option 2", detail: page.secondStep,
-                                  frame: NSRect(x: hasOr ? 306 : 290, y: 76,
-                                                width: hasOr ? 224 : 240, height: 54)))
         } else {
             addSubview(label("1", frame: NSRect(x: 32, y: 124, width: 18, height: 20), size: 11, weight: .bold,
                              color: NSColor(calibratedRed: 0.53, green: 0.73, blue: 1, alpha: 1)))

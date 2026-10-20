@@ -43,6 +43,25 @@ struct ClipboardDragTests {
             && $0.subviews.contains(where: { ($0 as? NSImageView)?.image != nil }) }) else {
             fatalError("Saved images should show their own thumbnail in the shelf")
         }
+        let finderImageRow = FileRowView(entry: ShelfEntry(url: image), status: .ready,
+                                         width: 332, removeAction: { _ in }, locateAction: { _ in })
+        guard finderImageRow.subviews.contains(where: { $0.frame.width == 43
+            && $0.subviews.contains(where: { ($0 as? NSImageView)?.image != nil }) }) else {
+            fatalError("Image files added from Finder should show their own thumbnail")
+        }
+        guard let menuButton = imageRow.subviews.compactMap({ $0 as? GlassPillButton }).first(where: {
+            $0.accessibilityLabel()?.contains("More actions") == true
+        }), imageRow.hitTest(NSPoint(x: 17, y: 25)) === menuButton,
+           imageRow.hitTest(NSPoint(x: 55, y: 25)) === imageRow,
+           imageRow.menu == nil else {
+            fatalError("The item menu button must remain separate from the draggable thumbnail")
+        }
+        var menuAnchor: NSView?
+        imageRow.onActions = { menuAnchor = $0 }
+        menuButton.performClick(nil)
+        guard menuAnchor === menuButton else {
+            fatalError("The three-dot button should open the menu anchored to itself")
+        }
 
         let store = ShelfStore(storageURL: root.appendingPathComponent("shelf.json"))
         let files = (0..<8).map { root.appendingPathComponent("file-\($0).txt") }
