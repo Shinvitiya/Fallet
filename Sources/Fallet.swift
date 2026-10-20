@@ -1195,7 +1195,9 @@ private extension FalletApp {
         let files = (target.map { [$0] } ?? store.entries).filter {
             $0.isFileLike && store.status(for: $0) == .ready
         }
-        let image = files.count == 1 && isImageFile(files[0].url) ? files[0] : nil
+        let image = target.flatMap { item in
+            item.isFileLike && store.status(for: item) == .ready && isImageFile(item.url) ? item : nil
+        }
         let collect: [ShelfActionOption] = target == nil ? [
             ShelfActionOption("Paste from Clipboard", detail: "Add copied files, links, images or text", symbol: "doc.on.clipboard") { [weak self] in
                 guard let self else { return }
@@ -1230,7 +1232,7 @@ private extension FalletApp {
                 self?.showGuide()
             }
         ]
-        let actions: [ShelfActionOption] = [
+        var actions: [ShelfActionOption] = [
             ShelfActionOption("Share…", detail: "AirDrop, Mail, Messages and more", symbol: "square.and.arrow.up",
                               enabled: !(target.map { [$0] } ?? store.entries).isEmpty) { [weak self, weak anchor] in
                 guard let self, let anchor else { return }
@@ -1238,16 +1240,18 @@ private extension FalletApp {
             },
             ShelfActionOption("Create ZIP", detail: "Add a temporary ZIP to the shelf", symbol: "doc.zipper", enabled: !files.isEmpty) { [weak self] in
                 self?.createZIP(from: files)
-            },
-            ShelfActionOption("Resize Image…", detail: "Export a smaller image copy", symbol: "arrow.up.left.and.arrow.down.right",
-                              enabled: image != nil) { [weak self] in
-                guard let image else { return }; self?.resizeImage(image)
-            },
-            ShelfActionOption("Extract Text", detail: "Read text from an image", symbol: "text.viewfinder",
-                              enabled: image != nil) { [weak self] in
-                guard let image else { return }; self?.extractText(from: image)
             }
         ]
+        if let image {
+            actions.append(ShelfActionOption("Resize Image…", detail: "Export a smaller image copy",
+                                             symbol: "arrow.up.left.and.arrow.down.right") { [weak self] in
+                self?.resizeImage(image)
+            })
+            actions.append(ShelfActionOption("Extract Text", detail: "Read text from an image",
+                                             symbol: "text.viewfinder") { [weak self] in
+                self?.extractText(from: image)
+            })
+        }
         actionPopover.show(from: anchor, titles: (target == nil ? "Collect" : "Item", "Actions"),
                            groups: (collect, actions))
     }

@@ -11,7 +11,7 @@ Fallet is a small macOS menu bar app for keeping files, images, links, and text 
 - Drag an individual item from the shelf into a Finder folder. Use **Drag all** when everything belongs in the same folder.
 - The shelf groups files and folders above text and links, even if you add the text first. Move Up and Move Down reorder within a group.
 - Use **Move to** to choose a destination folder. Click an item to preview it; its context menu offers rename, reorder, and sharing.
-- Open **More actions** (the ellipsis in the header) for the compact **Collect** and **Actions** menu. Collect adds files, clipboard contents, text, or links. Actions can share by AirDrop or another macOS service, create a ZIP, resize an image, or extract text from an image.
+- Open **More actions** (the ellipsis in the header) for the compact **Collect** and **Actions** menu. Collect adds files, clipboard contents, text, or links. Actions can share by AirDrop or another macOS service, or create a ZIP. Right-click an image row for its Resize Image and Extract Text actions.
 - Use **Clear** to empty the shelf without deleting original files; Fallet-generated images and temporary ZIPs are discarded. The shelf hides when its last item is moved out.
 - Open **More actions → How to Use** for a short walkthrough. Right-click the menu bar icon for **Quit Fallet**.
 
