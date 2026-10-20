@@ -664,9 +664,10 @@ final class FalletApp: NSObject, NSApplicationDelegate {
     }
 
     private func checkForShake() {
+        let finderIsActive = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder"
         let leftButtonHeld = NSEvent.pressedMouseButtons & 1 != 0
             || CGEventSource.buttonState(.combinedSessionState, button: .left)
-        guard leftButtonHeld else {
+        guard finderIsActive && leftButtonHeld else {
             shakeDetector.reset()
             return
         }
@@ -674,11 +675,6 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         guard time - lastShakeReveal > 2 else { return }
         let pointer = NSEvent.mouseLocation
         guard shakeDetector.sample(x: pointer.x, y: pointer.y, at: time) else { return }
-        let fromFinder = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder"
-        let hasFileURLs = NSPasteboard(name: .drag).canReadObject(
-            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]
-        )
-        guard fromFinder || hasFileURLs else { return }
         lastShakeReveal = time
         showShelf(near: pointer)
     }

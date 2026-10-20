@@ -35,6 +35,7 @@ For drag and drop changes, also check these flows in Finder:
 3. Copy an item to another volume and confirm the source remains available on the shelf.
 4. Use **Move to**, **Clear**, and **+** with the shelf both visible and hidden.
 5. Rename or move a saved file while Fallet is closed, then reopen it. Delete a different source and disconnect an external drive; check that each state is shown and can be recovered.
+6. Shake the pointer while dragging files in Finder and confirm the shelf opens. Drag selected text in a browser and shake the pointer; the shelf should stay hidden.
 
 ## Project layout
 
