@@ -282,7 +282,7 @@ final class FileRowView: DragFilesView {
         switch status {
         case .ready:
             switch entry.kind {
-            case .file: icon.image = NSWorkspace.shared.icon(forFile: entry.path)
+            case .file, .archive: icon.image = NSWorkspace.shared.icon(forFile: entry.path)
             case .image: icon.image = thumbnail ?? NSWorkspace.shared.icon(forFile: entry.path)
             case .link: icon.image = NSImage(systemSymbolName: "link", accessibilityDescription: "Link")
             case .text: icon.image = NSImage(systemSymbolName: "text.alignleft", accessibilityDescription: "Text")
@@ -307,6 +307,7 @@ final class FileRowView: DragFilesView {
             switch entry.kind {
             case .file: detail = entry.url.deletingLastPathComponent().lastPathComponent
             case .image: detail = "Image · drag to save"
+            case .archive: detail = "Temporary ZIP · drag to keep"
             case .link: detail = entry.content ?? "Link"
             case .text: detail = "Text snippet · drag to paste"
             }
@@ -331,11 +332,14 @@ final class FileRowView: DragFilesView {
 
         let remove = GlassPillButton(frame: NSRect(x: width - 37, y: 12, width: 27, height: 27),
                                      title: "", symbol: "xmark")
-        remove.toolTip = "Remove from shelf"
+        remove.toolTip = entry.kind == .archive ? "Permanently delete this temporary ZIP"
+            : entry.kind == .image ? "Remove saved image from shelf" : "Remove from shelf"
         remove.target = self
         remove.action = #selector(removeClicked)
         addSubview(remove)
-        toolTip = status == .ready ? "Drag to another app, or right-click for more options" : detail
+        toolTip = status == .ready && entry.kind == .archive
+            ? "Drag to Finder or use Move to. Clear or Quit permanently deletes this ZIP."
+            : status == .ready ? "Drag to another app, or right-click for more options" : detail
         let context = NSMenu()
         let preview = context.addItem(withTitle: "Preview", action: #selector(previewClicked), keyEquivalent: "")
         preview.target = self
@@ -649,7 +653,7 @@ final class ShelfView: NSView {
                                             ? NSRect(x: 276, y: height - 124, width: 70, height: 38)
                                             : NSRect(x: 205, y: 7, width: 70, height: 38),
                                         title: "Clear", symbol: "xmark")
-            clear.toolTip = "Remove all items from shelf without moving files"
+            clear.toolTip = "Clear shelf; original files stay, saved images and temporary ZIPs are deleted"
             clear.target = self
             clear.action = #selector(clearClicked)
             if hasFileSection { addSubview(clear) } else { header.addSubview(clear) }
@@ -925,6 +929,7 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         sourceRefreshTimer?.invalidate()
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
+        store.removeTemporaryArchives()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -1202,7 +1207,7 @@ private extension FalletApp {
             ShelfActionOption("Copy Shelf", detail: "Copy available items to the clipboard", symbol: "doc.on.doc") { [weak self] in
                 self?.copyItems(self?.store.entries ?? [])
             },
-            ShelfActionOption("How to Use", detail: "See the four-step guide", symbol: "questionmark.circle") { [weak self] in
+            ShelfActionOption("How to Use", detail: "Explore Fallet’s features", symbol: "questionmark.circle") { [weak self] in
                 self?.showGuide()
             }
         ] : [
@@ -1221,7 +1226,7 @@ private extension FalletApp {
             ShelfActionOption("Copy", detail: "Copy this item to the clipboard", symbol: "doc.on.doc") { [weak self] in
                 guard let target else { return }; self?.copyItems([target])
             },
-            ShelfActionOption("How to Use", detail: "See the four-step guide", symbol: "questionmark.circle") { [weak self] in
+            ShelfActionOption("How to Use", detail: "Explore Fallet’s features", symbol: "questionmark.circle") { [weak self] in
                 self?.showGuide()
             }
         ]
@@ -1231,7 +1236,7 @@ private extension FalletApp {
                 guard let self, let anchor else { return }
                 self.share(target.map { [$0] } ?? self.store.entries, from: anchor)
             },
-            ShelfActionOption("Create ZIP…", detail: "Archive the available files", symbol: "doc.zipper", enabled: !files.isEmpty) { [weak self] in
+            ShelfActionOption("Create ZIP", detail: "Add a temporary ZIP to the shelf", symbol: "doc.zipper", enabled: !files.isEmpty) { [weak self] in
                 self?.createZIP(from: files)
             },
             ShelfActionOption("Resize Image…", detail: "Export a smaller image copy", symbol: "arrow.up.left.and.arrow.down.right",
@@ -1277,7 +1282,7 @@ private extension FalletApp {
         board.clearContents()
         let writers: [NSPasteboardWriting] = available.compactMap { entry in
             switch entry.kind {
-            case .file, .image: return entry.url as NSURL
+            case .file, .image, .archive: return entry.url as NSURL
             case .link: return URL(string: entry.content ?? "") as NSURL?
             case .text: return (entry.content ?? "") as NSString
             }
@@ -1334,7 +1339,7 @@ private extension FalletApp {
     func share(_ entries: [ShelfEntry], from anchor: NSView) {
         let items: [Any] = entries.filter { store.status(for: $0) == .ready }.compactMap { entry in
             switch entry.kind {
-            case .file, .image: return entry.url as NSURL
+            case .file, .image, .archive: return entry.url as NSURL
             case .link: return URL(string: entry.content ?? "") as NSURL?
             case .text: return entry.content as NSString?
             }
@@ -1349,19 +1354,33 @@ private extension FalletApp {
     func createZIP(from entries: [ShelfEntry]) {
         let files = entries.map(\.url)
         guard !files.isEmpty else { return }
-        let picker = NSSavePanel()
-        picker.allowedContentTypes = [.zip]
-        picker.nameFieldStringValue = files.count == 1
-            ? files[0].deletingPathExtension().lastPathComponent + ".zip" : "Fallet Files.zip"
-        picker.prompt = "Create ZIP"
-        NSApp.activate(ignoringOtherApps: true)
-        guard picker.runModal() == .OK, let destination = picker.url else { return }
+        let destination: URL
+        do { destination = try store.makeTemporaryArchiveURL(for: files) }
+        catch {
+            showError("Could not prepare ZIP", error.localizedDescription)
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
                 try ShelfOperations.createZIP(from: files, at: destination)
-                DispatchQueue.main.async { self?.store.add([destination]) }
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    guard FileManager.default.fileExists(atPath: destination.deletingLastPathComponent().path) else { return }
+                    guard let id = self.store.addTemporaryArchive(destination) else {
+                        self.store.discardTemporaryArchive(at: destination)
+                        self.showError("Could not add ZIP", "The archive could not be added to the shelf.")
+                        return
+                    }
+                    self.panel.orderFrontRegardless()
+                    self.shelfView.scrollToEntry(id)
+                    DispatchQueue.main.async { [weak self] in self?.shelfView.scrollToEntry(id) }
+                }
             } catch {
-                DispatchQueue.main.async { self?.showError("Could not create ZIP", error.localizedDescription) }
+                DispatchQueue.main.async {
+                    guard FileManager.default.fileExists(atPath: destination.deletingLastPathComponent().path) else { return }
+                    self?.store.discardTemporaryArchive(at: destination)
+                    self?.showError("Could not create ZIP", error.localizedDescription)
+                }
             }
         }
     }

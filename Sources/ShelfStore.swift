@@ -9,6 +9,7 @@ enum ShelfEntryStatus: Equatable {
 enum ShelfEntryKind: String, Codable {
     case file
     case image
+    case archive
     case link
     case text
 }
@@ -56,10 +57,10 @@ struct ShelfEntry: Codable, Equatable {
     }
 
     var url: URL { URL(fileURLWithPath: path) }
-    var isFileLike: Bool { kind == .file || kind == .image }
+    var isFileLike: Bool { kind == .file || kind == .image || kind == .archive }
     var title: String {
         switch kind {
-        case .file, .image: return url.lastPathComponent
+        case .file, .image, .archive: return url.lastPathComponent
         case .link: return URL(string: content ?? "")?.host ?? content ?? "Link"
         case .text: return content?.split(whereSeparator: \.isNewline).first.map(String.init) ?? "Text"
         }
@@ -82,15 +83,18 @@ final class ShelfStore {
 
     private let storageURL: URL
     private let imageDirectory: URL
+    private let archiveDirectory: URL
     private var statusSnapshot: [UUID: ShelfEntryStatus] = [:]
 
     init(storageURL customStorageURL: URL? = nil, legacyURL customLegacyURL: URL? = nil) {
         let supportRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         storageURL = customStorageURL ?? supportRoot.appendingPathComponent("Fallet/shelf.json")
         imageDirectory = storageURL.deletingLastPathComponent().appendingPathComponent("Images")
+        archiveDirectory = storageURL.deletingLastPathComponent().appendingPathComponent("Temporary ZIPs")
         try? FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
 
         let legacyURL = customLegacyURL ?? (customStorageURL == nil
             ? supportRoot.appendingPathComponent("DropShelf/shelf.json") : nil)
@@ -99,9 +103,12 @@ final class ShelfStore {
         if let data, let saved = try? JSONDecoder().decode([ShelfEntry].self, from: data) {
             entries = saved
         }
+        let hadTemporaryArchives = entries.contains { $0.kind == .archive }
+        entries.removeAll { $0.kind == .archive }
+        discardOrphanedArchives()
         statusSnapshot = snapshot()
         refresh()
-        if currentData == nil && data != nil { changed() }
+        if hadTemporaryArchives || (currentData == nil && data != nil) { changed() }
     }
 
     func status(for entry: ShelfEntry) -> ShelfEntryStatus {
@@ -126,7 +133,7 @@ final class ShelfStore {
         let previous = entries
         for index in entries.indices {
             var entry = entries[index]
-            guard entry.isFileLike else { continue }
+            guard entry.isFileLike && entry.kind != .archive else { continue }
             if let bookmarkData = entry.bookmarkData {
                 var isStale = false
                 if let resolved = try? URL(resolvingBookmarkData: bookmarkData,
@@ -159,6 +166,36 @@ final class ShelfStore {
         guard !additions.isEmpty else { return }
         entries.append(contentsOf: additions)
         changed()
+    }
+
+    func makeTemporaryArchiveURL(for sources: [URL]) throws -> URL {
+        guard !sources.isEmpty else { throw CocoaError(.fileNoSuchFile) }
+        let folder = archiveDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let name = sources.count == 1
+            ? sources[0].deletingPathExtension().lastPathComponent + ".zip" : "Fallet Files.zip"
+        return folder.appendingPathComponent(name)
+    }
+
+    @discardableResult
+    func addTemporaryArchive(_ url: URL) -> UUID? {
+        guard managedArchiveFolder(for: url) != nil,
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let entry = ShelfEntry(url: url, kind: .archive)
+        entries.append(entry)
+        changed()
+        return entry.id
+    }
+
+    func discardTemporaryArchive(at url: URL) {
+        guard let folder = managedArchiveFolder(for: url) else { return }
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    func removeTemporaryArchives() {
+        let archiveIDs = Set(entries.filter { $0.kind == .archive }.map(\.id))
+        if !archiveIDs.isEmpty { remove(archiveIDs) }
+        discardOrphanedArchives()
     }
 
     func addText(_ text: String) {
@@ -221,7 +258,7 @@ final class ShelfStore {
     @discardableResult
     func relink(_ id: UUID, to url: URL) -> Bool {
         guard url.isFileURL, FileManager.default.fileExists(atPath: url.path),
-              let index = entries.firstIndex(where: { $0.id == id && $0.isFileLike }) else { return false }
+              let index = entries.firstIndex(where: { $0.id == id && $0.isFileLike && $0.kind != .archive }) else { return false }
         let path = url.standardizedFileURL.path
         guard !entries.contains(where: { $0.id != id && $0.path == path }) else { return false }
         entries[index].updateReference(to: url)
@@ -234,6 +271,9 @@ final class ShelfStore {
             && entry.url.deletingLastPathComponent().standardizedFileURL == imageDirectory.standardizedFileURL {
             try? FileManager.default.removeItem(at: entry.url)
         }
+        for entry in entries where ids.contains(entry.id) && entry.kind == .archive {
+            discardTemporaryArchive(at: entry.url)
+        }
         entries.removeAll { ids.contains($0.id) }
         changed()
     }
@@ -244,6 +284,7 @@ final class ShelfStore {
 
     func clear() {
         remove(Set(entries.map(\.id)))
+        discardOrphanedArchives()
     }
 
     private func snapshot() -> [UUID: ShelfEntryStatus] {
@@ -256,6 +297,22 @@ final class ShelfStore {
         }
         statusSnapshot = snapshot()
         onChange?()
+    }
+
+    private func managedArchiveFolder(for url: URL) -> URL? {
+        let folder = url.standardizedFileURL.deletingLastPathComponent()
+        guard folder.deletingLastPathComponent() == archiveDirectory.standardizedFileURL,
+              UUID(uuidString: folder.lastPathComponent) != nil else { return nil }
+        return folder
+    }
+
+    private func discardOrphanedArchives() {
+        let folders = (try? FileManager.default.contentsOfDirectory(
+            at: archiveDirectory, includingPropertiesForKeys: nil
+        )) ?? []
+        for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
+            try? FileManager.default.removeItem(at: folder)
+        }
     }
 
     private static func inferredVolumePath(for path: String) -> String? {

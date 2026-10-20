@@ -7,36 +7,76 @@ private struct GuidePage {
     let summary: String
     let firstStep: String
     let secondStep: String
+    var optionsHeading: String? = nil
+    var firstOptionTitle: String? = nil
+    var secondOptionTitle: String? = nil
 }
 
 private let guidePages: [GuidePage] = [
     GuidePage(
-        eyebrow: "01  •  COLLECT",
-        title: "Give your files a place to wait.",
-        summary: "Open from the menu bar or shake while dragging in Finder. Add Files is in More actions.",
+        eyebrow: "01  •  OPEN & COLLECT",
+        title: "Your shelf is one gesture away.",
+        summary: "Use the menu bar, Control–Option–Space, or a pointer shake while dragging Finder files. You can also drop onto the menu bar icon or notch target.",
         firstStep: "Click the Fallet icon.",
-        secondStep: "Shake pointer while dragging in Finder."
+        secondStep: "Wiggle while dragging Finder files.",
+        optionsHeading: "TWO WAYS TO OPEN THE SHELF",
+        firstOptionTitle: "Menu bar",
+        secondOptionTitle: "While dragging"
     ),
     GuidePage(
         eyebrow: "02  •  SPLIT A BATCH",
         title: "One selection. Many destinations.",
         summary: "Put several files from one folder on the shelf, then send each one exactly where it belongs.",
         firstStep: "Drag File A from the shelf into Folder X in Finder.",
-        secondStep: "Drag File B into Folder Y. The other files stay on the shelf."
+        secondStep: "Drag File B into Folder Y. The rest wait on the shelf."
     ),
     GuidePage(
-        eyebrow: "03  •  MOVE TOGETHER",
+        eyebrow: "03  •  WEB IMAGES",
+        title: "Take website images into Finder.",
+        summary: "Drag an image straight from a webpage onto Fallet. Its thumbnail stays visible so you can tell images apart.",
+        firstStep: "Drag a website image onto the shelf.",
+        secondStep: "Drag it from Fallet into any Finder folder."
+    ),
+    GuidePage(
+        eyebrow: "04  •  ZIP ANY FILES",
+        title: "Bundle files and images into one ZIP.",
+        summary: "Create ZIP works with files, folders, and website images on your shelf. You can mix them in one archive.",
+        firstStep: "Open More actions → Actions → Create ZIP.",
+        secondStep: "Drag the ZIP to Finder. Clear or Quit deletes it if left here."
+    ),
+    GuidePage(
+        eyebrow: "05  •  TEXT & LINKS",
+        title: "Keep more than files close.",
+        summary: "Paste text and links, type your own, or use Services → Add to Fallet in supported apps. They sit below files and can be dragged out later.",
+        firstStep: "Choose Paste from Clipboard in Collect.",
+        secondStep: "Use Add Text or Add Link in Collect.",
+        optionsHeading: "WAYS TO ADD CONTENT",
+        firstOptionTitle: "Paste",
+        secondOptionTitle: "Write or link"
+    ),
+    GuidePage(
+        eyebrow: "06  •  IMAGE TOOLS",
+        title: "Resize images or read their text.",
+        summary: "Right-click an image → More Actions → Actions. Click an item to preview; its menu also has rename, reorder, and Share via AirDrop.",
+        firstStep: "Enter a width, then choose where to save.",
+        secondStep: "OCR adds recognized text to the shelf.",
+        optionsHeading: "CHOOSE AN IMAGE ACTION",
+        firstOptionTitle: "Resize Image…",
+        secondOptionTitle: "Extract Text"
+    ),
+    GuidePage(
+        eyebrow: "07  •  MOVE TOGETHER",
         title: "Move the whole batch at once.",
-        summary: "When every file belongs in the same place, take them all in one drag.",
-        firstStep: "Hold and drag Drag all onto a Finder folder.",
+        summary: "Files and folders stay on top. Use Drag all or Move to when they share a destination.",
+        firstStep: "Hold Drag all and drop in a Finder folder.",
         secondStep: "Or choose Move to and pick a destination folder."
     ),
     GuidePage(
-        eyebrow: "04  •  STAY IN FLOW",
+        eyebrow: "08  •  STAY IN FLOW",
         title: "A shelf that stays out of your way.",
-        summary: "Keep the shelf where you want it, and bring it back only when you need it.",
-        firstStep: "Drag its header to reposition it; use − to hide it.",
-        secondStep: "Use the menu bar icon to reopen it. Clear only empties the shelf."
+        summary: "Reposition or hide the shelf. Saved sources survive relaunch; Locate helps if one moves or disappears.",
+        firstStep: "Drag the header to reposition; use − to hide.",
+        secondStep: "Clear empties the shelf; right-click the menu icon to quit."
     )
 ]
 
@@ -84,13 +124,13 @@ private final class GuideDiagramView: NSView {
         card.stroke()
 
         switch page {
-        case 0:
+        case 0, 2, 3, 4:
             arrow(from: 148, to: 202, y: 93)
             arrow(from: 300, to: 354, y: 93)
         case 1:
             arrow(from: 217, to: 298, y: 112)
             arrow(from: 217, to: 298, y: 46)
-        case 2:
+        case 6:
             arrow(from: 190, to: 321, y: 94)
         default:
             break
@@ -110,6 +150,23 @@ private final class GuideDiagramView: NSView {
             compactTile("doc", label: "File B", frame: NSRect(x: 31, y: 22, width: 48, height: 48), active: true)
             compactTile("folder", label: "Folder Y", frame: NSRect(x: 308, y: 22, width: 48, height: 48))
         case 2:
+            iconTile("globe", label: "Webpage", frame: NSRect(x: 61, y: 57, width: 72, height: 72))
+            iconTile("photo.fill", label: "Image on shelf", frame: NSRect(x: 214, y: 57, width: 72, height: 72), active: true)
+            iconTile("folder", label: "Any folder", frame: NSRect(x: 367, y: 57, width: 72, height: 72))
+        case 3:
+            iconTile("square.stack.3d.up", label: "Files & images", frame: NSRect(x: 61, y: 57, width: 72, height: 72))
+            iconTile("doc.zipper", label: "ZIP on shelf", frame: NSRect(x: 214, y: 57, width: 72, height: 72), active: true)
+            iconTile("folder", label: "Keep in Finder", frame: NSRect(x: 367, y: 57, width: 72, height: 72))
+        case 4:
+            iconTile("doc.on.clipboard", label: "Clipboard", frame: NSRect(x: 61, y: 57, width: 72, height: 72))
+            iconTile("square.grid.3x3.fill", label: "Fallet", frame: NSRect(x: 214, y: 57, width: 72, height: 72), active: true)
+            iconTile("arrow.up.right", label: "Use anywhere", frame: NSRect(x: 367, y: 57, width: 72, height: 72))
+        case 5:
+            iconTile("eye", label: "Preview", frame: NSRect(x: 31, y: 64, width: 58, height: 58), captionWidth: 100)
+            iconTile("arrow.up.left.and.arrow.down.right", label: "Resize", frame: NSRect(x: 157, y: 64, width: 58, height: 58), captionWidth: 100)
+            iconTile("text.viewfinder", label: "OCR text", frame: NSRect(x: 283, y: 64, width: 58, height: 58), active: true, captionWidth: 100)
+            iconTile("square.and.arrow.up", label: "Share", frame: NSRect(x: 409, y: 64, width: 58, height: 58), captionWidth: 100)
+        case 6:
             iconTile("square.stack.3d.up", label: "Drag all 10", frame: NSRect(x: 99, y: 58, width: 72, height: 72), active: true)
             iconTile("folder", label: "Destination", frame: NSRect(x: 329, y: 58, width: 72, height: 72))
             let note = caption("Move to also opens a folder picker", frame: NSRect(x: 90, y: 10, width: 320, height: 16), active: false)
@@ -323,21 +380,26 @@ final class GuideView: NSView {
         addSubview(label(page.summary, frame: NSRect(x: 32, y: 329, width: 496, height: 38), size: 11.5,
                          color: NSColor(calibratedWhite: 1, alpha: 0.82)))
 
-        let diagram = GuideDiagramView(frame: NSRect(x: 30, y: currentPage == 0 ? 164 : 157,
-                                                     width: 500, height: currentPage == 0 ? 153 : 160))
+        let hasOptions = page.optionsHeading != nil
+        let diagram = GuideDiagramView(frame: NSRect(x: 30, y: hasOptions ? 164 : 157,
+                                                     width: 500, height: hasOptions ? 153 : 160))
         diagram.page = currentPage
         addSubview(diagram)
 
-        if currentPage == 0 {
-            addSubview(label("HOW TO OPEN THE SHELF", frame: NSRect(x: 30, y: 137, width: 350, height: 16),
+        if let optionsHeading = page.optionsHeading {
+            addSubview(label(optionsHeading, frame: NSRect(x: 30, y: 137, width: 350, height: 16),
                              size: 10, weight: .bold,
                              color: NSColor(calibratedRed: 0.58, green: 0.75, blue: 1, alpha: 1)))
-            addSubview(optionCard(title: "Menu bar", detail: page.firstStep,
-                                  frame: NSRect(x: 30, y: 76, width: 224, height: 54)))
-            addSubview(label("OR", frame: NSRect(x: 265, y: 94, width: 30, height: 18), size: 10,
-                             weight: .bold, color: NSColor(calibratedWhite: 1, alpha: 0.56), alignment: .center))
-            addSubview(optionCard(title: "While dragging", detail: page.secondStep,
-                                  frame: NSRect(x: 306, y: 76, width: 224, height: 54)))
+            let hasOr = currentPage == 0
+            addSubview(optionCard(title: page.firstOptionTitle ?? "Option 1", detail: page.firstStep,
+                                  frame: NSRect(x: 30, y: 76, width: hasOr ? 224 : 240, height: 54)))
+            if hasOr {
+                addSubview(label("OR", frame: NSRect(x: 265, y: 94, width: 30, height: 18), size: 10,
+                                 weight: .bold, color: NSColor(calibratedWhite: 1, alpha: 0.56), alignment: .center))
+            }
+            addSubview(optionCard(title: page.secondOptionTitle ?? "Option 2", detail: page.secondStep,
+                                  frame: NSRect(x: hasOr ? 306 : 290, y: 76,
+                                                width: hasOr ? 224 : 240, height: 54)))
         } else {
             addSubview(label("1", frame: NSRect(x: 32, y: 124, width: 18, height: 20), size: 11, weight: .bold,
                              color: NSColor(calibratedRed: 0.53, green: 0.73, blue: 1, alpha: 1)))
@@ -356,9 +418,10 @@ final class GuideView: NSView {
             addSubview(back)
         }
 
+        let indicatorStart = (bounds.width - CGFloat(guidePages.count) * 20) / 2
         for index in guidePages.indices {
             let width: CGFloat = index == currentPage ? 15 : 6
-            let slotX = 240 + CGFloat(index) * 20
+            let slotX = indicatorStart + CGFloat(index) * 20
             let dot = NSView(frame: NSRect(x: slotX + (20 - width) / 2, y: 35, width: width, height: 6))
             dot.wantsLayer = true
             dot.layer?.cornerRadius = 3

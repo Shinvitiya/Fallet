@@ -105,6 +105,65 @@ struct ShelfStoreTests {
         guard grouped.entries.map(\.kind) == [.link, .file, .text] else {
             fatalError("A file should not move into the text and link group")
         }
+
+        let archiveStorage = root.appendingPathComponent("archives/shelf.json")
+        let archives = ShelfStore(storageURL: archiveStorage)
+        archives.add([replacement])
+        let ordinaryZIP = root.appendingPathComponent("my-existing.zip")
+        try Data("existing".utf8).write(to: ordinaryZIP)
+        archives.add([ordinaryZIP])
+        let temporaryZIP = try archives.makeTemporaryArchiveURL(for: [replacement])
+        try Data("temporary".utf8).write(to: temporaryZIP)
+        guard archives.addTemporaryArchive(ordinaryZIP) == nil else {
+            fatalError("An external ZIP must not become a temporary archive")
+        }
+        guard archives.addTemporaryArchive(temporaryZIP) != nil,
+              archives.entries.last?.kind == .archive,
+              archives.entries.last?.isFileLike == true else {
+            fatalError("A generated ZIP should be a draggable shelf file")
+        }
+        archives.clear()
+        guard !files.fileExists(atPath: temporaryZIP.path),
+              files.fileExists(atPath: ordinaryZIP.path),
+              files.fileExists(atPath: replacement.path) else {
+            fatalError("Clear should delete only generated ZIPs, not user files")
+        }
+        let pendingZIP = try archives.makeTemporaryArchiveURL(for: [replacement])
+        try Data("pending".utf8).write(to: pendingZIP)
+        archives.clear()
+        guard !files.fileExists(atPath: pendingZIP.path) else {
+            fatalError("Clear should remove ZIPs created before they reach the shelf")
+        }
+
+        let movedZIP = try archives.makeTemporaryArchiveURL(for: [replacement])
+        try Data("moved".utf8).write(to: movedZIP)
+        guard archives.addTemporaryArchive(movedZIP) != nil else { fatalError("Could not add generated ZIP") }
+        let destinationZIP = root.appendingPathComponent("kept.zip")
+        try files.moveItem(at: movedZIP, to: destinationZIP)
+        archives.removePaths([movedZIP.path])
+        guard files.fileExists(atPath: destinationZIP.path),
+              !files.fileExists(atPath: movedZIP.deletingLastPathComponent().path) else {
+            fatalError("Moving a generated ZIP must preserve its destination")
+        }
+
+        archives.add([replacement])
+        let quitZIP = try archives.makeTemporaryArchiveURL(for: [replacement])
+        try Data("quit".utf8).write(to: quitZIP)
+        guard archives.addTemporaryArchive(quitZIP) != nil else { fatalError("Could not add generated ZIP") }
+        archives.removeTemporaryArchives()
+        guard !files.fileExists(atPath: quitZIP.path),
+              archives.entries.count == 1, archives.entries[0].kind == .file else {
+            fatalError("Quit should delete generated ZIPs and retain ordinary shelf entries")
+        }
+
+        let abandonedZIP = try archives.makeTemporaryArchiveURL(for: [replacement])
+        try Data("abandoned".utf8).write(to: abandonedZIP)
+        guard archives.addTemporaryArchive(abandonedZIP) != nil else { fatalError("Could not add generated ZIP") }
+        let restarted = ShelfStore(storageURL: archiveStorage)
+        guard !files.fileExists(atPath: abandonedZIP.path),
+              restarted.entries.count == 1, restarted.entries[0].kind == .file else {
+            fatalError("Relaunch should clean generated ZIPs left after a forced quit")
+        }
         print("Shelf persistence tests passed")
     }
 }

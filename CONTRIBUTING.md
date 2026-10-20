@@ -28,10 +28,10 @@ swiftc -target "$(uname -m)-apple-macosx13.0" -module-cache-path .build/module-c
 .build/shelf-store-tests
 ```
 
-Run the local ZIP, image, and script checks with:
+Run the local ZIP and image checks with:
 
 ```sh
-swiftc -target "$(uname -m)-apple-macosx13.0" -module-cache-path .build/module-cache -framework Vision -framework ImageIO Sources/ShelfOperations.swift Tests/ShelfOperationsTests.swift -o .build/shelf-operations-tests
+swiftc -target "$(uname -m)-apple-macosx13.0" -module-cache-path .build/module-cache -framework Vision -framework ImageIO Sources/ShelfStore.swift Sources/ShelfOperations.swift Tests/ShelfOperationsTests.swift -o .build/shelf-operations-tests
 .build/shelf-operations-tests
 ```
 
@@ -44,7 +44,8 @@ For drag and drop changes, also check these flows in Finder:
 5. Rename or move a saved file while Fallet is closed, then reopen it. Delete a different source and disconnect an external drive; check that each state is shown and can be recovered.
 6. Shake the pointer while dragging files in Finder and confirm the shelf opens. Drag selected text in a browser and shake the pointer; the shelf should stay hidden.
 7. Add a URL, plain text, and a browser image, then drag each to an appropriate destination. Switch between **Collect** and **Actions** and confirm the dropdown stays fixed in size.
-8. Check preview, rename, reorder, ZIP, resize, OCR, AirDrop, the keyboard shortcut, menu bar drop, and the notch target on hardware that has one.
+8. Create a ZIP and drag it to Finder. Confirm the exported ZIP remains there after clearing the shelf and quitting Fallet. Create another ZIP, then clear or quit before moving it; confirm its temporary copy is deleted.
+9. Check preview, rename, reorder, resize, OCR, AirDrop, the keyboard shortcut, menu bar drop, and the notch target on hardware that has one.
 
 ## Project layout
 
@@ -63,12 +64,12 @@ For drag and drop changes, also check these flows in Finder:
 - `Scripts/make-icns.swift` — packs the generated icon sizes into an `.icns` resource.
 - `Scripts/make-demo-video.swift` — builds the short MP4 from the checked-in demo captures.
 - `Scripts/capture-persistence-demo.swift` — renders the four README persistence states from isolated test files.
-- `Scripts/capture-guide-slides.swift` — renders the four current guide slides for the README.
-- `docs/guide/` — all four in-app guide slides, shown inline in the README.
+- `Scripts/capture-guide-slides.swift` — renders all eight guide slides for the README.
+- `docs/guide/` — all eight in-app guide slides, shown inline in the README.
 - `docs/demo/` — app captures and the short demo video.
 - `Tests/ShakeDetectorTests.swift` — shake detection checks.
-- `Tests/ShelfStoreTests.swift` — rename, move, missing source, relinking, and disconnected-volume persistence checks.
-- `Tests/ShelfOperationsTests.swift` — ZIP contents and resize dimensions.
+- `Tests/ShelfStoreTests.swift` — rename, move, missing source, relinking, disconnected-volume persistence, and temporary ZIP cleanup checks.
+- `Tests/ShelfOperationsTests.swift` — ZIP contents, temporary shelf export, and resize dimensions.
 - `Tests/ClipboardDragTests.swift` — copied-image export, image thumbnails, and shelf scroll continuity.
 - `Formula/fallet.rb` — source-built Homebrew formula in this repository's custom tap.
 

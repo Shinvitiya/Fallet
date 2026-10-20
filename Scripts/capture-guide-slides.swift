@@ -6,7 +6,8 @@ struct GuideSlideCapture {
         _ = NSApplication.shared
         let window = GuideWindow()
         guard let view = window.contentView as? GuideView else { fatalError("Guide view missing") }
-        let names = ["01-collect", "02-split-a-batch", "03-move-together", "04-stay-in-flow"]
+        let names = ["01-collect", "02-split-a-batch", "03-web-images", "04-zip-images",
+                     "05-text-links", "06-item-tools", "07-move-together", "08-stay-in-flow"]
         let directory = URL(fileURLWithPath: "docs/guide")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         for (index, name) in names.enumerated() {
@@ -28,6 +29,6 @@ struct GuideSlideCapture {
             }
             try png.write(to: directory.appendingPathComponent(name + ".png"), options: .atomic)
         }
-        print("Updated all four guide images")
+        print("Updated all eight guide images")
     }
 }
