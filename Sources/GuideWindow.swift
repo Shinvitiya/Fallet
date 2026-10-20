@@ -346,7 +346,20 @@ final class GuideView: NSView {
         return view
     }
 
-    private func optionCard(title: String, detail: String, frame: NSRect) -> NSView {
+    private func shortcutKeycap(_ title: String, x: CGFloat, width: CGFloat) -> NSView {
+        let key = NSView(frame: NSRect(x: x, y: 8, width: width, height: 26))
+        key.wantsLayer = true
+        key.layer?.cornerRadius = 6
+        key.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.14).cgColor
+        key.layer?.borderWidth = 1
+        key.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.38).cgColor
+        key.addSubview(label(title, frame: NSRect(x: 0, y: 4, width: width, height: 18),
+                             size: title == "space" ? 10 : 15, weight: .medium, alignment: .center))
+        return key
+    }
+
+    private func optionCard(title: String, detail: String, frame: NSRect,
+                            keyboardShortcut: Bool = false) -> NSView {
         let card = NSView(frame: frame)
         card.wantsLayer = true
         card.layer?.cornerRadius = 11
@@ -355,9 +368,15 @@ final class GuideView: NSView {
         card.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.17).cgColor
         card.addSubview(label(title, frame: NSRect(x: 12, y: frame.height - 23, width: frame.width - 24, height: 16),
                               size: 11, weight: .semibold))
-        card.addSubview(label(detail, frame: NSRect(x: 12, y: 8, width: frame.width - 24,
-                                                    height: frame.height - 35),
-                              size: 10, color: NSColor(calibratedWhite: 1, alpha: 0.75)))
+        if keyboardShortcut {
+            card.addSubview(shortcutKeycap("⌃", x: 12, width: 27))
+            card.addSubview(shortcutKeycap("⌥", x: 45, width: 27))
+            card.addSubview(shortcutKeycap("space", x: 78, width: 70))
+        } else {
+            card.addSubview(label(detail, frame: NSRect(x: 12, y: 8, width: frame.width - 24,
+                                                        height: frame.height - 35),
+                                  size: 10, color: NSColor(calibratedWhite: 1, alpha: 0.75)))
+        }
         return card
     }
 
@@ -401,7 +420,8 @@ final class GuideView: NSView {
                 for index in 0..<3 {
                     addSubview(optionCard(title: titles[index], detail: details[index],
                                           frame: NSRect(x: 30 + CGFloat(index) * 170, y: 68,
-                                                        width: 160, height: 62)))
+                                                        width: 160, height: 62),
+                                          keyboardShortcut: index == 1))
                 }
             } else {
                 addSubview(optionCard(title: page.firstOptionTitle ?? "Option 1", detail: page.firstStep,

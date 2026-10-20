@@ -238,6 +238,17 @@ final class FileRowView: DragFilesView {
         cache.countLimit = 128
         return cache
     }()
+    private static let moreIcon: NSImage = {
+        let image = NSImage(size: NSSize(width: 14, height: 17), flipped: false) { _ in
+            NSColor.black.setFill()
+            for y in [CGFloat(1.4), 6.8, 12.2] {
+                NSBezierPath(ovalIn: NSRect(x: 5.3, y: y, width: 3.4, height: 3.4)).fill()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
     private let entry: ShelfEntry
     private let removeAction: (UUID) -> Void
     private var isRemoving = false
@@ -266,10 +277,12 @@ final class FileRowView: DragFilesView {
                               : NSColor.systemOrange.withAlphaComponent(0.55)).cgColor
         layer?.backgroundColor = ShelfGlassStyle.rowFill.cgColor
 
-        let more = GlassPillButton(frame: NSRect(x: 6, y: 12, width: 23, height: 27),
-                                   title: "⋮", symbol: "")
-        more.font = .systemFont(ofSize: 17, weight: .bold)
-        more.imagePosition = .noImage
+        let more = NSButton(frame: NSRect(x: 4, y: 12, width: 27, height: 27))
+        more.isBordered = false
+        more.focusRingType = .none
+        more.image = Self.moreIcon
+        more.imagePosition = .imageOnly
+        more.contentTintColor = ShelfGlassStyle.primaryText
         more.toolTip = "More actions for this item"
         more.setAccessibilityLabel("More actions for \(entry.title)")
         more.target = self

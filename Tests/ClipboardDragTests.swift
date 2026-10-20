@@ -49,9 +49,11 @@ struct ClipboardDragTests {
             && $0.subviews.contains(where: { ($0 as? NSImageView)?.image != nil }) }) else {
             fatalError("Image files added from Finder should show their own thumbnail")
         }
-        guard let menuButton = imageRow.subviews.compactMap({ $0 as? GlassPillButton }).first(where: {
+        guard let menuButton = imageRow.subviews.compactMap({ $0 as? NSButton }).first(where: {
             $0.accessibilityLabel()?.contains("More actions") == true
-        }), imageRow.hitTest(NSPoint(x: 17, y: 25)) === menuButton,
+        }), menuButton.frame.width == menuButton.frame.height,
+           !menuButton.isBordered, !menuButton.wantsLayer,
+           imageRow.hitTest(NSPoint(x: 17, y: 25)) === menuButton,
            imageRow.hitTest(NSPoint(x: 55, y: 25)) === imageRow,
            imageRow.menu == nil else {
             fatalError("The item menu button must remain separate from the draggable thumbnail")
