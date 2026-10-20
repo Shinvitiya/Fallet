@@ -409,6 +409,12 @@ final class ShelfView: NSView {
     var onMove: (() -> Void)?
     var onLocate: ((UUID) -> Void)?
     var onTools: ((ShelfEntry?, NSView) -> Void)?
+    var onUpdate: ((NSView) -> Void)?
+    var availableUpdate: AvailableUpdate? {
+        didSet { if oldValue != availableUpdate { refreshUpdateBadge() } }
+    }
+    private weak var headerView: ShelfHeaderView?
+    private weak var updateBadge: GlassPillButton?
     var onResize: ((CGFloat) -> Void)?
     var onEmptiedByMove: (() -> Void)?
     var onPositionChanged: ((NSPoint) -> Void)?
@@ -513,6 +519,9 @@ final class ShelfView: NSView {
         subtitle.font = .systemFont(ofSize: 10)
         subtitle.textColor = ShelfGlassStyle.secondaryText
         header.addSubview(subtitle)
+
+        headerView = header
+        refreshUpdateBadge()
 
         let tools = GlassPillButton(frame: NSRect(x: 282, y: 11, width: 29, height: 29),
                                     title: "", symbol: "ellipsis")
@@ -711,6 +720,22 @@ final class ShelfView: NSView {
     }
 
     @objc private func toolsClicked(_ sender: NSView) { onTools?(nil, sender) }
+    @objc private func updateClicked(_ sender: NSView) { onUpdate?(sender) }
+
+    private func refreshUpdateBadge() {
+        updateBadge?.removeFromSuperview()
+        updateBadge = nil
+        guard let availableUpdate, let headerView else { return }
+        let badge = GlassPillButton(frame: NSRect(x: 166, y: 15, width: 108, height: 23),
+                                    title: "New v\(availableUpdate.release.version)", symbol: "")
+        badge.font = .systemFont(ofSize: 10, weight: .semibold)
+        badge.toolTip = "Fallet update available"
+        badge.setAccessibilityLabel("Fallet update available: version \(availableUpdate.release.version)")
+        badge.target = self
+        badge.action = #selector(updateClicked(_:))
+        headerView.addSubview(badge)
+        updateBadge = badge
+    }
     @objc private func hideClicked() { onHide?() }
     @objc private func moveClicked() { onMove?() }
     @objc private func clearClicked() { store.clear() }
@@ -831,6 +856,9 @@ final class FalletApp: NSObject, NSApplicationDelegate {
     private var guideWindow: GuideWindow?
     private var activePicker: NSOpenPanel?
     private let actionPopover = ShelfActionPopover()
+    private let updatePopover = UpdatePopover()
+    private var updateChecker: UpdateChecker?
+    private var updateTimer: Timer?
     private var previewWindow: NSWindow?
     private var sharingPicker: NSSharingServicePicker?
     private var contentEntryWindow: ContentEntryWindow?
@@ -896,6 +924,10 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         shelfView.onEmptiedByMove = { [weak self] in self?.panel.orderOut(nil) }
         shelfView.onLocate = { [weak self] id in self?.locateSource(id) }
         shelfView.onTools = { [weak self] entry, anchor in self?.showTools(for: entry, from: anchor) }
+        shelfView.onUpdate = { [weak self] anchor in
+            guard let update = self?.shelfView.availableUpdate else { return }
+            self?.updatePopover.show(update, from: anchor)
+        }
         shelfView.onMove = { [weak self] in self?.chooseDestination() }
         shelfView.onPositionChanged = { point in
             UserDefaults.standard.set([Double(point.x), Double(point.y)], forKey: "ShelfWindowTopLeft")
@@ -910,11 +942,20 @@ final class FalletApp: NSObject, NSApplicationDelegate {
             guard let self, !self.shelfView.isDraggingFiles else { return }
             self.store.refresh()
         }
+        let installedVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let checker = UpdateChecker(installedVersion: installedVersion)
+        updateChecker = checker
+        shelfView.availableUpdate = checker.cachedUpdate
+        checkForUpdates()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 3_600, repeats: true) { [weak self] _ in
+            self?.checkForUpdates()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         shakeTimer?.invalidate()
         sourceRefreshTimer?.invalidate()
+        updateTimer?.invalidate()
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
         store.removeTemporaryArchives()
@@ -960,6 +1001,12 @@ final class FalletApp: NSObject, NSApplicationDelegate {
         else if guideWindow?.isVisible == false { guideWindow?.resetGuide() }
         NSApp.activate(ignoringOtherApps: true)
         guideWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func checkForUpdates() {
+        updateChecker?.refreshIfDue { [weak self] update in
+            self?.shelfView.availableUpdate = update
+        }
     }
 
     private func restorePanelPosition() {

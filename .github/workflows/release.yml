@@ -1,9 +1,12 @@
-name: Release macOS DMG
+name: Optional notarized macOS DMG
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag to attach the notarized DMG to
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,13 +20,17 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
 
       - name: Check release version
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
-          test "$GITHUB_REF_NAME" = "v$version"
+          python3 Scripts/version.py check "$RELEASE_TAG"
 
       - name: Import Developer ID certificate and notary key
         shell: bash
@@ -61,14 +68,15 @@ jobs:
           FALLET_NOTARY_ISSUER_ID: ${{ secrets.FALLET_NOTARY_ISSUER_ID }}
         run: zsh package-dmg.sh
 
-      - name: Publish downloadable DMG
+      - name: Attach notarized DMG to existing release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" dist/Fallet-*-macOS-universal.dmg dist/Fallet-*-macOS-universal.dmg.sha256 \
-            --verify-tag --title "Fallet $GITHUB_REF_NAME" --generate-notes
+          gh release upload "$RELEASE_TAG" dist/Fallet-*-macOS-universal.dmg dist/Fallet-*-macOS-universal.dmg.sha256 \
+            --repo Shinvitiya/Fallet --clobber
 
       - name: Remove temporary signing files
         if: always()

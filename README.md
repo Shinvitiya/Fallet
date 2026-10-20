@@ -21,23 +21,21 @@ To resize an image or use OCR, click **⋮** beside its thumbnail and choose **A
 
 The shelf remembers regular contents and window position between launches; temporary ZIPs are discarded on quit. It stores each source's last path and a macOS file bookmark in `~/Library/Application Support/Fallet/shelf.json`, and imports existing entries from the former DropShelf build on first launch. Files stay at their original locations until you move them; Fallet does not upload them or use a network service.
 
-## Download and install
-
-When the first signed release is published, download the universal DMG from [GitHub Releases](https://github.com/Shinvitiya/Fallet/releases/latest). Open it, drag **Fallet.app** to **Applications**, eject the disk image, and launch Fallet from Applications. The same download supports Apple silicon and Intel Macs running macOS 13 or later.
-
-The app appears in the menu bar when it starts. Left-click its icon to show or hide the shelf; right-click it for Quit.
-
 ## Install with Homebrew
 
-Homebrew can build Fallet from source on your own Mac without a Developer ID. This uses the project’s custom tap, rather than Homebrew’s official cask collection:
+The recommended install is one command, once the [dedicated Fallet tap](https://github.com/Shinvitiya/homebrew-fallet) has been published:
 
 ```sh
-brew tap Shinvitiya/fallet https://github.com/Shinvitiya/Fallet.git
 brew install Shinvitiya/fallet/fallet
-fallet
 ```
 
-The first install compiles the app and needs Xcode Command Line Tools (`xcode-select --install`). Homebrew keeps the app in its Cellar; the `fallet` command opens it. This route does not provide a downloadable DMG or put an app icon in Applications.
+Then run `fallet` to open the app. Its icon appears in the menu bar; left-click to show or hide the shelf and right-click for Quit. The first install builds from source on your Mac, so you need Xcode Command Line Tools (`xcode-select --install`). The formula supports Apple silicon and Intel Macs on macOS 13 or later and keeps its launcher in Homebrew’s `bin` directory. The fully qualified install command automatically taps and trusts only this formula under [Homebrew’s third-party tap rules](https://docs.brew.sh/Tap-Trust).
+
+To update an installed copy, run `brew upgrade fallet`. Fallet checks for newer **stable, installable** releases in the background at launch and about once a day. If one is available, a small **New v…** badge appears beside its name. Click it for the release page or to copy the Homebrew upgrade command. No badge means the installed version is current or the check could not complete. You can also use `brew outdated fallet` in Terminal. Fallet never downloads or installs updates itself.
+
+Older installations made with `brew tap Shinvitiya/fallet https://github.com/Shinvitiya/Fallet.git` can keep using `brew upgrade fallet`: the release workflow updates that original formula as well. To switch the existing tap to the dedicated repository without uninstalling Fallet, run `brew tap --custom-remote Shinvitiya/fallet https://github.com/Shinvitiya/homebrew-fallet.git`, then `brew update`. Shelf data stays in `~/Library/Application Support/Fallet/`.
+
+Homebrew keeps this source-built app in its Cellar, not Applications. If you previously launched a separate `/Applications/Fallet.app`, quit that copy before using `fallet` so only one instance runs. No Apple Developer ID or notarization is required for the local source build, and there is no public ad-hoc signed DMG. Depending on your Mac’s security settings, macOS may still ask you to approve a locally built app; Fallet does not ask you to disable Gatekeeper globally. See [RELEASING.md](RELEASING.md) for how releases become available.
 
 ## Quick demo
 
@@ -108,7 +106,7 @@ zsh build.sh
 open dist/Fallet.app
 ```
 
-`build.sh` compiles a universal Swift and AppKit app into `dist/Fallet.app` and signs it ad hoc for local development. Distributable DMGs are made by the separate [release process](RELEASING.md), which requires Developer ID signing and Apple notarization.
+`build.sh` compiles a universal Swift and AppKit app into `dist/Fallet.app` and signs it ad hoc for local development. The free Homebrew release builds on each user's Mac. An optional distributable DMG requires Developer ID signing and Apple notarization, which this project does not currently have.
 
 ## How file moves work
 

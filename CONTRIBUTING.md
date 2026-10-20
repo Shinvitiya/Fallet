@@ -11,7 +11,7 @@ zsh build.sh
 open dist/Fallet.app
 ```
 
-The project uses Swift and AppKit directly, without a package manager or third-party runtime dependencies.
+The project uses Swift and AppKit directly, without a package manager or third-party runtime dependencies. Run all offline checks with `zsh Scripts/test.sh`; the separate commands below are useful when working on one area.
 
 Run the shake detection checks with:
 
@@ -43,9 +43,10 @@ For drag and drop changes, also check these flows in Finder:
 4. Use **Move to**, **Clear**, and **More actions → Add Files…** with the shelf both visible and hidden.
 5. Rename or move a saved file while Fallet is closed, then reopen it. Delete a different source and disconnect an external drive; check that each state is shown and can be recovered.
 6. Shake the pointer while dragging files in Finder and confirm the shelf opens. Drag selected text in a browser and shake the pointer; the shelf should stay hidden.
-7. Add a URL, plain text, and a browser image, then drag each to an appropriate destination. Switch between **Collect** and **Actions** and confirm the dropdown stays fixed in size.
+7. Add a URL, plain text, and a browser image, then drag each to an appropriate destination. Confirm the header's single-list menu and each item's three-dot menu do not interrupt dragging.
 8. Create a ZIP and drag it to Finder. Confirm the exported ZIP remains there after clearing the shelf and quitting Fallet. Create another ZIP, then clear or quit before moving it; confirm its temporary copy is deleted.
 9. Check preview, rename, reorder, resize, OCR, AirDrop, the keyboard shortcut, menu bar drop, and the notch target on hardware that has one.
+10. With an isolated test profile, simulate a newer release and confirm the small header badge opens the update panel, copies `brew upgrade fallet`, and disappears when the installed version catches up.
 
 ## Project layout
 
@@ -57,6 +58,8 @@ For drag and drop changes, also check these flows in Finder:
 - `Sources/GlassUI.swift` — shelf appearance and controls.
 - `Sources/GuideWindow.swift` — in-app guide.
 - `Sources/ShakeDetector.swift` — pointer shake detection.
+- `Sources/UpdateChecker.swift` — version parsing, GitHub release checks, and 24-hour cache.
+- `Sources/UpdatePopover.swift` — unobtrusive update details and actions.
 - `Resources/Info.plist` — app bundle metadata.
 - `branding/Fallet-icon-approved.png` — selected source artwork.
 - `Scripts/remove-icon-border.swift` — clips its outer black background to make the transparent `Resources/FalletIcon.png` build asset.
@@ -71,7 +74,10 @@ For drag and drop changes, also check these flows in Finder:
 - `Tests/ShelfStoreTests.swift` — rename, move, missing source, relinking, disconnected-volume persistence, and temporary ZIP cleanup checks.
 - `Tests/ShelfOperationsTests.swift` — ZIP contents, temporary shelf export, and resize dimensions.
 - `Tests/ClipboardDragTests.swift` — copied-image export, image thumbnails, and shelf scroll continuity.
-- `Formula/fallet.rb` — source-built Homebrew formula in this repository's custom tap.
+- `Tests/UpdateCheckerTests.swift` — release parsing, offline handling, version comparison, cache timing, and badge state.
+- `Tests/FormulaTests.py` — Homebrew source URL and checksum checks.
+- `Formula/fallet.rb` — source-built Homebrew formula for existing custom-tap users.
+- `TapTemplate/` — seed files for the dedicated `homebrew-fallet` repository.
 
 Keep generated files in `.build/` and `dist/`; both are ignored by Git. Please avoid adding personal file paths, credentials, or copyrighted assets you cannot redistribute.
 
