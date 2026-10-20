@@ -6,16 +6,16 @@ Fallet is a small macOS menu bar app for keeping files, images, links, and text 
 
 ## What it does
 
-- Drag files or folders from Finder onto the shelf. The shelf holds references to their original locations; adding them does not copy or move them. Drop browser images, links, and text on it too.
+- Drag files or folders from Finder onto the shelf. The shelf holds references to their original locations; adding them does not copy or move them. Drop browser images, links, and text on it too. Saved images show thumbnails so you can tell them apart.
 - Open the shelf from its menu bar icon, press **Control–Option–Space**, or shake the pointer while dragging files in Finder to bring it near the pointer. You can also drop items onto its menu bar icon or the small target that appears below the notch while dragging on a MacBook with a notch.
 - Drag an individual item from the shelf into a Finder folder. Use **Drag all** when everything belongs in the same folder.
 - The shelf groups files and folders above text and links, even if you add the text first. Move Up and Move Down reorder within a group.
 - Use **Move to** to choose a destination folder. Click an item to preview it; its context menu offers rename, reorder, and sharing.
-- Open **More actions** (the ellipsis in the header) for the compact **Collect** and **Actions** menu. Collect adds files, clipboard contents, text, or links. Actions can share by AirDrop or another macOS service, create a ZIP, resize an image, extract text from an image, or run a local script with selected file paths.
+- Open **More actions** (the ellipsis in the header) for the compact **Collect** and **Actions** menu. Collect adds files, clipboard contents, text, or links. Actions can share by AirDrop or another macOS service, create a ZIP, resize an image, or extract text from an image.
 - Use **Clear** to empty the shelf without deleting the original files. The shelf hides when its last item is moved out.
 - Open **More actions → How to Use** for a short walkthrough. Right-click the menu bar icon for **Quit Fallet**.
 
-In apps that offer macOS Services, select an item and choose **Services → Add to Fallet** to send it to the shelf. This is a Services command, not a Share extension. Image resizing and ZIP creation write to a location you choose and add the result to the shelf. OCR runs locally with Apple's Vision framework. Scripts run locally and receive the chosen file paths as command-line arguments; only run scripts you trust.
+In apps that offer macOS Services, select an item and choose **Services → Add to Fallet** to send it to the shelf. This is a Services command, not a Share extension. Image resizing and ZIP creation write to a location you choose and add the result to the shelf. OCR runs locally with Apple's Vision framework.
 
 The shelf remembers its contents and window position between launches. It stores each source's last path and a macOS file bookmark in `~/Library/Application Support/Fallet/shelf.json`, and imports existing entries from the former DropShelf build on first launch. Files stay at their original locations until you move them; Fallet does not upload them or use a network service.
 

@@ -81,25 +81,4 @@ enum ShelfOperations {
         return lines.joined(separator: "\n")
     }
 
-    static func runScript(at script: URL, with files: [URL]) throws -> String {
-        let task = Process()
-        if FileManager.default.isExecutableFile(atPath: script.path) {
-            task.executableURL = script
-            task.arguments = files.map(\.path)
-        } else {
-            task.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            task.arguments = [script.path] + files.map(\.path)
-        }
-        let output = Pipe()
-        task.standardOutput = output
-        task.standardError = output
-        try task.run()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-        let message = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard task.terminationStatus == 0 else {
-            throw ShelfOperationError.failed(message.isEmpty ? "Script exited with status \(task.terminationStatus)." : message)
-        }
-        return message
-    }
 }

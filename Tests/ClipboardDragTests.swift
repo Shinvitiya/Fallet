@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import UniformTypeIdentifiers
 
 @main
@@ -12,8 +13,15 @@ struct ClipboardDragTests {
 
         let image = root.appendingPathComponent("copied-image.png")
         let destination = root.appendingPathComponent("saved-image.png")
-        let bytes = Data("image contents".utf8)
-        try bytes.write(to: image)
+        let bitmap = CGContext(data: nil, width: 40, height: 20, bitsPerComponent: 8,
+                               bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        bitmap.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        bitmap.fill(CGRect(x: 0, y: 0, width: 40, height: 20))
+        let writer = CGImageDestinationCreateWithURL(image as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(writer, bitmap.makeImage()!, nil)
+        guard CGImageDestinationFinalize(writer) else { fatalError("Could not create image fixture") }
+        let bytes = try Data(contentsOf: image)
         var exportFinished = false
         let promise = ShelfImageFilePromise(sourceURL: image) { _ in exportFinished = true }
         let provider = promise.makeProvider()
@@ -29,6 +37,12 @@ struct ClipboardDragTests {
         }
         _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
         guard exportFinished else { fatalError("Successful image export was not reported") }
+        let imageRow = FileRowView(entry: ShelfEntry(url: image, kind: .image), status: .ready,
+                                   width: 332, removeAction: { _ in }, locateAction: { _ in })
+        guard imageRow.subviews.contains(where: { $0.frame.width == 43
+            && $0.subviews.contains(where: { ($0 as? NSImageView)?.image != nil }) }) else {
+            fatalError("Saved images should show their own thumbnail in the shelf")
+        }
 
         let store = ShelfStore(storageURL: root.appendingPathComponent("shelf.json"))
         let files = (0..<8).map { root.appendingPathComponent("file-\($0).txt") }
@@ -46,6 +60,16 @@ struct ClipboardDragTests {
         let finalScroll = shelf.subviews.compactMap { $0 as? NSScrollView }.first!
         guard finalScroll.contentView.bounds.origin.y == 0 else {
             fatalError("Pasting text should reveal the new item at the bottom of a grouped shelf")
+        }
+        shelf.rebuild()
+        let refreshedScroll = shelf.subviews.compactMap { $0 as? NSScrollView }.first!
+        guard refreshedScroll.contentView.bounds.origin.y == 0 else {
+            fatalError("A shelf refresh must keep a revealed item in view")
+        }
+        store.remove([store.entries.last!.id])
+        let afterRemoval = shelf.subviews.compactMap { $0 as? NSScrollView }.first!
+        guard afterRemoval.contentView.bounds.origin.y == 0 else {
+            fatalError("Removing an item at the bottom must not jump the shelf to the top")
         }
         print("Clipboard drag and reveal tests passed")
     }

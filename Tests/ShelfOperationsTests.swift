@@ -48,10 +48,6 @@ struct ShelfOperationsTests {
             fatalError("Image resize should keep aspect ratio")
         }
 
-        let script = root.appendingPathComponent("paths.zsh")
-        try Data("print -r -- \"$1\"".utf8).write(to: script)
-        let output = try ShelfOperations.runScript(at: script, with: [first])
-        guard output == first.path else { fatalError("Script did not receive the selected path") }
         print("Shelf operations tests passed")
     }
 }

@@ -52,8 +52,7 @@ For drag and drop changes, also check these flows in Finder:
 - `Sources/ShelfStore.swift` — persisted paths and bookmarks, source availability, and relinking.
 - `Sources/ShelfActionMenu.swift` — glass action dropdown.
 - `Sources/ContentEntryWindow.swift` — compact glass window for links and text.
-- `Sources/ShelfOperations.swift` — ZIP creation, image resizing, OCR, and local script execution.
-- `Sources/ScriptActionStore.swift` — saved local script actions.
+- `Sources/ShelfOperations.swift` — ZIP creation, image resizing, and OCR.
 - `Sources/GlassUI.swift` — shelf appearance and controls.
 - `Sources/GuideWindow.swift` — in-app guide.
 - `Sources/ShakeDetector.swift` — pointer shake detection.
@@ -69,7 +68,8 @@ For drag and drop changes, also check these flows in Finder:
 - `docs/demo/` — app captures and the short demo video.
 - `Tests/ShakeDetectorTests.swift` — shake detection checks.
 - `Tests/ShelfStoreTests.swift` — rename, move, missing source, relinking, and disconnected-volume persistence checks.
-- `Tests/ShelfOperationsTests.swift` — ZIP contents, resize dimensions, and script arguments.
+- `Tests/ShelfOperationsTests.swift` — ZIP contents and resize dimensions.
+- `Tests/ClipboardDragTests.swift` — copied-image export, image thumbnails, and shelf scroll continuity.
 - `Formula/fallet.rb` — source-built Homebrew formula in this repository's custom tap.
 
 Keep generated files in `.build/` and `dist/`; both are ignored by Git. Please avoid adding personal file paths, credentials, or copyrighted assets you cannot redistribute.

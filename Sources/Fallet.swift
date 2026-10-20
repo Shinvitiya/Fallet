@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import ImageIO
 import QuickLookUI
 import UniformTypeIdentifiers
 import Vision
@@ -232,8 +233,10 @@ class DragFilesView: NSView, NSDraggingSource {
 }
 
 final class FileRowView: DragFilesView {
+    private static let thumbnailCache = NSCache<NSString, NSImage>()
     private let entry: ShelfEntry
     private let removeAction: (UUID) -> Void
+    private var isRemoving = false
     private let locateAction: (UUID) -> Void
     var onPreview: (() -> Void)?
     var onRename: (() -> Void)?
@@ -264,17 +267,23 @@ final class FileRowView: DragFilesView {
                               : NSColor.systemOrange.withAlphaComponent(0.55)).cgColor
         layer?.backgroundColor = ShelfGlassStyle.rowFill.cgColor
 
-        let iconWell = NSView(frame: NSRect(x: 9, y: 7, width: 37, height: 37))
+        let thumbnail = status == .ready && entry.kind == .image ? Self.thumbnail(at: entry.url) : nil
+        let iconWell = NSView(frame: thumbnail == nil
+            ? NSRect(x: 9, y: 7, width: 37, height: 37)
+            : NSRect(x: 7, y: 4, width: 43, height: 43))
         iconWell.wantsLayer = true
         iconWell.layer?.cornerRadius = 10
+        iconWell.layer?.masksToBounds = true
         iconWell.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.11).cgColor
         addSubview(iconWell)
 
-        let icon = NSImageView(frame: NSRect(x: 5, y: 5, width: 27, height: 27))
+        let icon = NSImageView(frame: thumbnail == nil
+            ? NSRect(x: 5, y: 5, width: 27, height: 27) : iconWell.bounds)
         switch status {
         case .ready:
             switch entry.kind {
-            case .file, .image: icon.image = NSWorkspace.shared.icon(forFile: entry.path)
+            case .file: icon.image = NSWorkspace.shared.icon(forFile: entry.path)
+            case .image: icon.image = thumbnail ?? NSWorkspace.shared.icon(forFile: entry.path)
             case .link: icon.image = NSImage(systemSymbolName: "link", accessibilityDescription: "Link")
             case .text: icon.image = NSImage(systemSymbolName: "text.alignleft", accessibilityDescription: "Text")
             }
@@ -349,7 +358,34 @@ final class FileRowView: DragFilesView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    @objc private func removeClicked() { removeAction(entry.id) }
+    private static func thumbnail(at url: URL) -> NSImage? {
+        let key = url.standardizedFileURL.path as NSString
+        if let cached = thumbnailCache.object(forKey: key) { return cached }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 128
+              ] as CFDictionary) else { return nil }
+        let thumbnail = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+        thumbnailCache.setObject(thumbnail, forKey: key)
+        return thumbnail
+    }
+
+    @objc private func removeClicked() {
+        guard !isRemoving else { return }
+        isRemoving = true
+        guard !ShelfGlassStyle.reduceMotion else {
+            removeAction(entry.id)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            self.animator().alphaValue = 0
+        } completionHandler: {
+            self.removeAction(self.entry.id)
+        }
+    }
     @objc private func locateClicked() { locateAction(entry.id) }
     @objc private func previewClicked() { onPreview?() }
     @objc private func renameClicked() { onRename?() }
@@ -411,6 +447,11 @@ final class ShelfView: NSView {
     }
 
     func rebuild() {
+        let previousScrollY = itemScrollView?.contentView.bounds.minY
+        let previousMaxY = itemScrollView.flatMap { scroll -> CGFloat? in
+            guard let document = scroll.documentView else { return nil }
+            return max(0, document.frame.height - scroll.contentView.bounds.height)
+        }
         hintResetTimer?.invalidate()
         dragHintLabel = nil
         dragAllButton = nil
@@ -534,7 +575,15 @@ final class ShelfView: NSView {
                 }
             }
             scroll.documentView = document
-            scroll.contentView.scroll(to: NSPoint(x: 0, y: documentHeight - scrollHeight))
+            let maxY = max(0, documentHeight - scrollHeight)
+            let initialY: CGFloat
+            if let previousScrollY, let previousMaxY {
+                initialY = previousScrollY < 2 ? 0
+                    : min(maxY, max(0, maxY - (previousMaxY - previousScrollY)))
+            } else {
+                initialY = maxY
+            }
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: initialY))
             scroll.reflectScrolledClipView(scroll.contentView)
             addSubview(scroll)
             itemScrollView = scroll
@@ -730,6 +779,7 @@ final class ShelfView: NSView {
         defer {
             if let newEntry = store.entries.last(where: { !previousIDs.contains($0.id) }) {
                 scrollToEntry(newEntry.id)
+                DispatchQueue.main.async { [weak self] in self?.scrollToEntry(newEntry.id) }
             }
         }
         let files = pasteboard.readObjects(forClasses: [NSURL.self],
@@ -778,7 +828,6 @@ final class ShelfView: NSView {
 @main
 final class FalletApp: NSObject, NSApplicationDelegate {
     private let store = ShelfStore()
-    private let scriptActions = ScriptActionStore()
     private var statusItem: NSStatusItem!
     private var statusDropView: StatusDropView?
     private var notchPanel: NSPanel?
@@ -1192,13 +1241,6 @@ private extension FalletApp {
             ShelfActionOption("Extract Text", detail: "Read text from an image", symbol: "text.viewfinder",
                               enabled: image != nil) { [weak self] in
                 guard let image else { return }; self?.extractText(from: image)
-            },
-            ShelfActionOption("Run Script…", detail: "Send file paths to a local script", symbol: "terminal",
-                              enabled: !files.isEmpty) { [weak self] in
-                self?.chooseScript(for: files)
-            },
-            ShelfActionOption("Custom Scripts…", detail: "Save, run or remove script actions", symbol: "chevron.left.forwardslash.chevron.right") { [weak self] in
-                self?.manageScripts(for: files)
             }
         ]
         actionPopover.show(from: anchor, titles: (target == nil ? "Collect" : "Item", "Actions"),
@@ -1366,79 +1408,6 @@ private extension FalletApp {
                 }
             } catch {
                 DispatchQueue.main.async { self?.showError("Could not extract text", error.localizedDescription) }
-            }
-        }
-    }
-
-    func chooseScript(for entries: [ShelfEntry], save: Bool = false) {
-        let picker = NSOpenPanel()
-        picker.canChooseFiles = true
-        picker.canChooseDirectories = false
-        picker.allowsMultipleSelection = false
-        picker.prompt = save ? "Save as Action" : "Run Script"
-        picker.message = "Choose a local script. Fallet passes the selected file paths as arguments."
-        presentPicker(picker) { [weak self] response in
-            guard response == .OK, let url = picker.url, let self else { return }
-            if save {
-                self.scriptActions.add(url, title: url.deletingPathExtension().lastPathComponent)
-            } else {
-                self.runScript(url, for: entries)
-            }
-        }
-    }
-
-    func manageScripts(for entries: [ShelfEntry]) {
-        let actions = scriptActions.actions
-        guard !actions.isEmpty else {
-            chooseScript(for: entries, save: true)
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Custom scripts"
-        alert.informativeText = "Saved scripts run locally with the selected file paths as arguments."
-        alert.addButton(withTitle: "Run")
-        alert.addButton(withTitle: "Remove")
-        alert.addButton(withTitle: "Add New")
-        alert.addButton(withTitle: "Cancel")
-        let selection = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26))
-        selection.addItems(withTitles: actions.map(\.title))
-        alert.accessoryView = selection
-        NSApp.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-        guard actions.indices.contains(selection.indexOfSelectedItem) else { return }
-        let action = actions[selection.indexOfSelectedItem]
-        switch response {
-        case .alertFirstButtonReturn: runScript(action.url, for: entries)
-        case .alertSecondButtonReturn: scriptActions.remove(action.id)
-        case .alertThirdButtonReturn: chooseScript(for: entries, save: true)
-        default: break
-        }
-    }
-
-    func runScript(_ script: URL, for entries: [ShelfEntry]) {
-        let files = entries.filter { $0.isFileLike && store.status(for: $0) == .ready }.map(\.url)
-        guard !files.isEmpty else {
-            showError("No files ready", "Add a file before running this script.")
-            return
-        }
-        guard FileManager.default.fileExists(atPath: script.path) else {
-            showError("Script missing", "Choose the script again from Custom Scripts.")
-            return
-        }
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            do {
-                let output = try ShelfOperations.runScript(at: script, with: files)
-                if !output.isEmpty {
-                    DispatchQueue.main.async {
-                        let alert = NSAlert()
-                        alert.messageText = "Script finished"
-                        alert.informativeText = String(output.prefix(4000))
-                        NSApp.activate(ignoringOtherApps: true)
-                        alert.runModal()
-                    }
-                }
-            } catch {
-                DispatchQueue.main.async { self?.showError("Script failed", error.localizedDescription) }
             }
         }
     }
