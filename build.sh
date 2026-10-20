@@ -20,8 +20,8 @@ swiftc -target "${host_arch}-apple-macosx13.0" -module-cache-path .build/module-
 # Each Mac runs its native slice of the universal executable.
 for arch in arm64 x86_64; do
   swiftc -O -parse-as-library -target "${arch}-apple-macosx13.0" -module-cache-path .build/module-cache \
-    -framework AppKit -framework QuartzCore -framework UniformTypeIdentifiers \
-    Sources/Fallet.swift Sources/ShelfStore.swift Sources/GlassUI.swift Sources/GuideWindow.swift Sources/ShakeDetector.swift \
+    -framework AppKit -framework Carbon -framework QuartzCore -framework UniformTypeIdentifiers -framework QuickLookUI -framework Vision -framework ImageIO \
+    Sources/Fallet.swift Sources/ShelfStore.swift Sources/GlassUI.swift Sources/GuideWindow.swift Sources/ShakeDetector.swift Sources/ShelfActionMenu.swift Sources/ContentEntryWindow.swift Sources/ShelfOperations.swift Sources/ScriptActionStore.swift \
     -o ".build/Fallet-${arch}"
 done
 lipo -create .build/Fallet-arm64 .build/Fallet-x86_64 -output "$app/Contents/MacOS/Fallet"

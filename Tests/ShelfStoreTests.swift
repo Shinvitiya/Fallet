@@ -71,6 +71,40 @@ struct ShelfStoreTests {
         guard imported.entries.count == 1, imported.status(for: imported.entries[0]) == .missing else {
             fatalError("Old path-only shelf entries should remain recoverable")
         }
+
+        let contentStorage = root.appendingPathComponent("content-shelf.json")
+        let content = ShelfStore(storageURL: contentStorage)
+        content.addText("A useful note")
+        content.addLink(URL(string: "https://example.com/page")!)
+        guard content.addImage(Data([1, 2, 3])) else { fatalError("Image was not stored") }
+        let imageURL = content.entries[2].url
+        let textID = content.entries[0].id
+        content.moveEntry(textID, by: 1)
+        let contentReopened = ShelfStore(storageURL: contentStorage)
+        guard contentReopened.entries.map(\.kind) == [.link, .text, .image],
+              contentReopened.entries[1].content == "A useful note",
+              contentReopened.status(for: contentReopened.entries[1]) == .ready,
+              files.fileExists(atPath: imageURL.path) else {
+            fatalError("Mixed content or shelf order did not survive relaunch")
+        }
+        contentReopened.clear()
+        guard !files.fileExists(atPath: imageURL.path) else {
+            fatalError("Clearing the shelf should remove stored image copies")
+        }
+
+        let grouped = ShelfStore(storageURL: root.appendingPathComponent("grouped.json"))
+        grouped.addText("First note")
+        grouped.add([replacement])
+        grouped.addLink(URL(string: "https://example.com")!)
+        let noteID = grouped.entries[0].id
+        grouped.moveEntry(noteID, by: 1)
+        guard grouped.entries.map(\.kind) == [.link, .file, .text] else {
+            fatalError("Reordering should stay within the text and link group")
+        }
+        grouped.moveEntry(grouped.entries[1].id, by: 1)
+        guard grouped.entries.map(\.kind) == [.link, .file, .text] else {
+            fatalError("A file should not move into the text and link group")
+        }
         print("Shelf persistence tests passed")
     }
 }

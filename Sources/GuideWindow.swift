@@ -13,7 +13,7 @@ private let guidePages: [GuidePage] = [
     GuidePage(
         eyebrow: "01  •  COLLECT",
         title: "Give your files a place to wait.",
-        summary: "Open the shelf either way, then drag files into it from Finder. Use + if you prefer a file picker.",
+        summary: "Open from the menu bar or shake while dragging in Finder. Add Files is in More actions.",
         firstStep: "Click the Fallet icon.",
         secondStep: "Shake pointer while dragging in Finder."
     ),
@@ -264,6 +264,14 @@ final class GuideView: NSView {
         currentPage = 0
         showPage(animated: false)
     }
+
+    #if FALLET_CAPTURE
+    func setPageForCapture(_ index: Int) {
+        guard guidePages.indices.contains(index) else { return }
+        currentPage = index
+        showPage(animated: false)
+    }
+    #endif
 
     private func label(_ value: String, frame: NSRect, size: CGFloat, weight: NSFont.Weight = .regular,
                        color: NSColor = .white, alignment: NSTextAlignment = .left) -> NSTextField {
