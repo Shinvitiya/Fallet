@@ -125,8 +125,10 @@ final class ShelfHeaderView: NSView {
 
 class DragFilesView: NSView, NSDraggingSource {
     var urls: [URL] = []
+    var promisedImagePaths: Set<String> = []
     var contentWriter: NSPasteboardWriting?
     var onMoved: (([URL]) -> Void)?
+    var onPromisedImageWritten: ((URL) -> Void)?
     var onClick: (() -> Void)?
     var onPressChanged: ((Bool) -> Void)?
     var onDragStarted: (() -> Void)?
@@ -134,6 +136,7 @@ class DragFilesView: NSView, NSDraggingSource {
     var shouldRemoveMissingURL: ((URL) -> Bool)?
     var showsPressFeedback = false
     private var pendingURLs: [URL] = []
+    private var pendingPromiseIDs: [UUID] = []
     private var mouseDownEvent: NSEvent?
     private var dragStarted = false
 
@@ -169,9 +172,19 @@ class DragFilesView: NSView, NSDraggingSource {
         guard hypot(current.x - start.x, current.y - start.y) >= 3 else { return }
         dragStarted = true
         onDragStarted?()
-        pendingURLs = urls
+        pendingURLs = urls.filter { !promisedImagePaths.contains($0.standardizedFileURL.path) }
+        pendingPromiseIDs = []
         var items = urls.enumerated().map { index, url -> NSDraggingItem in
-            let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+            let writer: NSPasteboardWriting
+            if promisedImagePaths.contains(url.standardizedFileURL.path) {
+                let callback = onPromisedImageWritten
+                let promise = ShelfImageFilePromise(sourceURL: url) { writtenURL in callback?(writtenURL) }
+                pendingPromiseIDs.append(promise.id)
+                writer = promise.makeProvider()
+            } else {
+                writer = url as NSURL
+            }
+            let item = NSDraggingItem(pasteboardWriter: writer)
             let icon = NSWorkspace.shared.icon(forFile: url.path)
             icon.size = NSSize(width: 32, height: 32)
             let origin = NSPoint(x: 14 + CGFloat(index % 4) * 5, y: bounds.midY - 16 - CGFloat(index % 4) * 5)
@@ -189,10 +202,13 @@ class DragFilesView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        if !urls.isEmpty && pendingURLs.isEmpty { return .copy }
         return urls.isEmpty ? .copy : [.move, .copy]
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        if operation.isEmpty { ShelfImageFilePromise.cancel(pendingPromiseIDs) }
+        pendingPromiseIDs = []
         let completed = operation.contains(.move)
             ? pendingURLs
             : pendingURLs.filter {
@@ -233,7 +249,10 @@ final class FileRowView: DragFilesView {
         self.locateAction = locateAction
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 51))
         if status == .ready {
-            if entry.isFileLike { urls = [entry.url] }
+            if entry.isFileLike {
+                urls = [entry.url]
+                if entry.kind == .image { promisedImagePaths = [entry.url.standardizedFileURL.path] }
+            }
             else if entry.kind == .link, let url = URL(string: entry.content ?? "") { contentWriter = url as NSURL }
             else if entry.kind == .text { contentWriter = (entry.content ?? "") as NSString }
         }
@@ -357,6 +376,8 @@ final class ShelfView: NSView {
     private let glassOverlay = GlassOverlayView(frame: .zero)
     private weak var dragAllButton: DragAllFilesView?
     private weak var dragHintLabel: NSTextField?
+    private weak var itemScrollView: NSScrollView?
+    private var entryRows: [UUID: FileRowView] = [:]
     private var hintResetTimer: Timer?
     private var moveFeedbackTimer: Timer?
     private var transientMovedCount: Int?
@@ -393,6 +414,8 @@ final class ShelfView: NSView {
         hintResetTimer?.invalidate()
         dragHintLabel = nil
         dragAllButton = nil
+        itemScrollView = nil
+        entryRows.removeAll()
         for view in subviews where view !== backdrop && view !== glassOverlay {
             view.removeFromSuperview()
         }
@@ -482,6 +505,9 @@ final class ShelfView: NSView {
                     row.onMoved = { [weak self] urls in
                         self?.removeMovedFiles(urls, from: [entry])
                     }
+                    row.onPromisedImageWritten = { [weak self] url in
+                        self?.removeMovedFiles([url], from: [entry])
+                    }
                     row.onClick = { [weak self] in self?.onPreview?(entry) }
                     row.onPreview = { [weak self] in self?.onPreview?(entry) }
                     row.onRename = { [weak self] in self?.onRename?(entry) }
@@ -503,6 +529,7 @@ final class ShelfView: NSView {
                         } ?? false
                     }
                     document.addSubview(row)
+                    entryRows[entry.id] = row
                     cursorY -= 55
                 }
             }
@@ -510,6 +537,7 @@ final class ShelfView: NSView {
             scroll.contentView.scroll(to: NSPoint(x: 0, y: documentHeight - scrollHeight))
             scroll.reflectScrolledClipView(scroll.contentView)
             addSubview(scroll)
+            itemScrollView = scroll
 
             if hasFileSection {
                 let fileHeading = NSTextField(labelWithString: "FILES & FOLDERS  ·  \(fileEntries.count)")
@@ -522,8 +550,13 @@ final class ShelfView: NSView {
             if !readyEntries.isEmpty {
                 let dragAll = DragAllFilesView(frame: NSRect(x: 14, y: height - 124, width: 150, height: 38))
                 dragAll.urls = readyEntries.map(\.url)
+                dragAll.promisedImagePaths = Set(readyEntries.filter { $0.kind == .image }
+                    .map { $0.url.standardizedFileURL.path })
                 dragAll.onMoved = { [weak self] urls in
                     self?.removeMovedFiles(urls, from: readyEntries, showFeedback: true)
+                }
+                dragAll.onPromisedImageWritten = { [weak self] url in
+                    self?.removeMovedFiles([url], from: readyEntries, showFeedback: true)
                 }
                 dragAll.shouldRemoveMissingURL = { [weak self] url in
                     self?.store.entries.first(where: { $0.path == url.path }).map {
@@ -693,6 +726,12 @@ final class ShelfView: NSView {
 
     @discardableResult
     func addFromPasteboard(_ pasteboard: NSPasteboard) -> Bool {
+        let previousIDs = Set(store.entries.map(\.id))
+        defer {
+            if let newEntry = store.entries.last(where: { !previousIDs.contains($0.id) }) {
+                scrollToEntry(newEntry.id)
+            }
+        }
         let files = pasteboard.readObjects(forClasses: [NSURL.self],
                                            options: [.urlReadingFileURLsOnly: true]) as? [NSURL] ?? []
         if !files.isEmpty {
@@ -720,6 +759,18 @@ final class ShelfView: NSView {
             return true
         }
         return false
+    }
+
+    func scrollToEntry(_ id: UUID) {
+        guard let scroll = itemScrollView, let row = entryRows[id],
+              let document = scroll.documentView else { return }
+        let visible = scroll.contentView.bounds
+        guard !visible.contains(row.frame) else { return }
+        let targetY = row.frame.maxY > visible.maxY
+            ? row.frame.maxY - visible.height + 8 : row.frame.minY - 8
+        let maxY = max(0, document.frame.height - visible.height)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: min(max(0, targetY), maxY)))
+        scroll.reflectScrolledClipView(scroll.contentView)
     }
 }
 
