@@ -1,8 +1,8 @@
 class Fallet < Formula
   desc "Floating file shelf for moving files around Finder"
   homepage "https://github.com/Shinvitiya/Fallet"
-  url "https://github.com/Shinvitiya/Fallet/archive/refs/tags/v1.6.3.tar.gz"
-  sha256 "891860ffa459753c0eceec545e0fd05520dd3c541322e2abb992195e0fe42694"
+  url "https://github.com/Shinvitiya/Fallet/archive/refs/tags/v1.6.4.tar.gz"
+  sha256 "53168aaf5d0e011008fc134ebc02831fafa9f233b530903471ba1009d0893c8d"
   license "MIT"
 
   depends_on macos: :ventura
