@@ -106,12 +106,25 @@ class AppLinkTests(unittest.TestCase):
             support = home / "Library" / "Application Support" / "Fallet"
             cache = home / "Library" / "Caches" / "dev.local.fallet"
             preferences = home / "Library" / "Preferences" / "dev.local.fallet.plist"
+            homebrew_log = home / "Library" / "Logs" / "Homebrew" / "fallet"
+            crash_folder = home / "Library" / "Logs" / "DiagnosticReports"
+            crash_report = crash_folder / "Fallet-2026-10-21.ips"
+            other_report = crash_folder / "AnotherApp-2026-10-21.ips"
+            crash_marker = (home / "Library" / "Application Support" / "CrashReporter" /
+                            "Fallet_ABC.plist")
             support.mkdir(parents=True)
             cache.mkdir(parents=True)
             preferences.parent.mkdir(parents=True)
+            homebrew_log.mkdir(parents=True)
+            crash_folder.mkdir(parents=True)
+            crash_marker.parent.mkdir(parents=True)
             (support / "shelf.json").write_text("shelf")
             (cache / "cache.db").write_text("cache")
             preferences.write_text("settings")
+            (homebrew_log / "build.log").write_text("log")
+            crash_report.write_text("crash")
+            other_report.write_text("keep")
+            crash_marker.write_text("marker")
             other = home / "Library" / "Application Support" / "Another App"
             other.mkdir()
             (other / "data").write_text("keep")
@@ -127,6 +140,10 @@ class AppLinkTests(unittest.TestCase):
         self.assertFalse(support.exists())
         self.assertFalse(cache.exists())
         self.assertFalse(preferences.exists())
+        self.assertFalse(homebrew_log.exists())
+        self.assertFalse(crash_report.exists())
+        self.assertFalse(crash_marker.exists())
+        self.assertEqual(other_report.read_text(), "keep")
         self.assertEqual((other / "data").read_text(), "keep")
 
     def test_failed_signing_preserves_legacy_link(self):

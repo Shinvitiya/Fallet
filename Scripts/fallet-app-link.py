@@ -253,6 +253,7 @@ def remove_owned_data(home: Path) -> None:
         library / "Saved Application State" / "dev.local.fallet.savedState",
         library / "HTTPStorages" / "dev.local.fallet",
         library / "WebKit" / "dev.local.fallet",
+        library / "Logs" / "Homebrew" / "fallet",
     ]
     # Flush cfprefsd's copy so a deleted preferences file is not recreated.
     subprocess.run(["/usr/bin/defaults", "delete", "dev.local.fallet"],
@@ -262,6 +263,16 @@ def remove_owned_data(home: Path) -> None:
             path.unlink()
         elif path.is_dir():
             shutil.rmtree(path)
+    for folder, patterns in (
+        (library / "Application Support" / "CrashReporter", ("Fallet_*.plist",)),
+        (library / "Logs" / "DiagnosticReports", ("Fallet-*.ips", "FalletLauncher-*.ips")),
+    ):
+        if folder.is_symlink() or not folder.is_dir():
+            continue
+        for pattern in patterns:
+            for path in folder.glob(pattern):
+                if path.is_file() or path.is_symlink():
+                    path.unlink()
 
 
 def full_uninstall(target: Path, system_applications: Path,
