@@ -55,6 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           lipo dist/Fallet.app/Contents/MacOS/Fallet -verify_arch arm64 x86_64
+          lipo .build/FalletLauncher -verify_arch arm64 x86_64
           codesign --verify --deep --strict dist/Fallet.app
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Fallet.app/Contents/Info.plist)" = "${RELEASE_TAG#v}"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist/Fallet.app/Contents/Info.plist)" = "${RELEASE_TAG#v}"

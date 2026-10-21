@@ -25,5 +25,11 @@ for arch in arm64 x86_64; do
     -o ".build/Fallet-${arch}"
 done
 lipo -create .build/Fallet-arm64 .build/Fallet-x86_64 -output "$app/Contents/MacOS/Fallet"
+# The small visible launcher stays in ~/Applications and opens the current Homebrew keg.
+for arch in arm64 x86_64; do
+  swiftc -O -target "${arch}-apple-macosx13.0" -module-cache-path .build/module-cache \
+    -framework AppKit Scripts/FalletLauncher.swift -o ".build/FalletLauncher-${arch}"
+done
+lipo -create .build/FalletLauncher-arm64 .build/FalletLauncher-x86_64 -output .build/FalletLauncher
 codesign --force --sign - "$app"
 echo "Built ${PWD}/$app"

@@ -41,6 +41,8 @@ class FormulaTests(unittest.TestCase):
         self.assertIn('prefix.install "dist/Fallet.app"', content)
         self.assertIn('exec /usr/bin/open "#{opt_prefix}/Fallet.app"', content)
         self.assertIn('bin.install "Scripts/fallet-app-link.py" => "fallet-app-link"', content)
+        self.assertIn('(bin/"fallet-uninstall").make_symlink "fallet-app-link"', content)
+        self.assertIn('libexec.install ".build/FalletLauncher"', content)
         self.assertNotIn("post_install", content)
         self.assertFalse((ROOT / "TapTemplate" / "Formula" / "fallet.rb").exists())
 
@@ -188,6 +190,7 @@ else:
         self.assertIn('python3 Scripts/version.py check "$RELEASE_TAG"', workflow)
         self.assertIn('python3 Scripts/formula.py verify "$FORMULA_PATH" --archive "$ARCHIVE_PATH"',
                       workflow)
+        self.assertIn('lipo .build/FalletLauncher -verify_arch arm64 x86_64', workflow)
 
 
 if __name__ == "__main__":
