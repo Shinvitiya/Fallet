@@ -4,8 +4,11 @@ This repository is the Homebrew tap for the free, open-source [Fallet](https://g
 
 ```sh
 brew install Shinvitiya/fallet/fallet
+fallet-app-link link
 fallet
 ```
+
+The optional second command creates `~/Applications/Fallet.app` so you can open Fallet from Finder. It points to Homebrew's stable `opt/fallet` path and survives upgrades. Spotlight visibility can take time; Launchpad visibility is not guaranteed. Uninstall cleanly with `fallet-app-link unlink` followed by `brew uninstall Shinvitiya/fallet/fallet`.
 
 Fallet builds on your Mac with Xcode Command Line Tools and is signed ad hoc. It is not Apple-notarized. The fully qualified install command automatically taps and trusts this one formula; it does not require trusting every formula in the tap.
 

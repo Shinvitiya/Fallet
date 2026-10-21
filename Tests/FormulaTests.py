@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Offline checks for the source-build formula and its release updater."""
+"""Offline checks for Fallet's source formula and release publishing."""
 
 import hashlib
+import json
 import os
+import plistlib
 import subprocess
 import sys
 import tempfile
@@ -13,74 +15,116 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Scripts"))
 import formula  # noqa: E402
 
+FORMULA = ROOT / "Formula" / "fallet.rb"
+FORMULA_CLI = ROOT / "Scripts" / "formula.py"
+PUBLISH = ROOT / "Scripts" / "publish-formula.sh"
+
+
+def run_formula(*args: object) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([sys.executable, str(FORMULA_CLI), *(str(arg) for arg in args)],
+                          capture_output=True, text=True)
+
+
+def fixture(path: Path, tag: str, checksum: str = "a" * 64) -> None:
+    """Copy today's formula layout while pinning an isolated test release."""
+    content, url, _, current_checksum = formula.fields(FORMULA)
+    content = content.replace(f'  url "{url}"', f'  url "{formula.SOURCE}{tag}.tar.gz"')
+    content = content.replace(f'  sha256 "{current_checksum}"', f'  sha256 "{checksum}"')
+    path.write_text(content)
+
 
 class FormulaTests(unittest.TestCase):
-    def test_source_and_tap_seed_match(self):
-        source = ROOT / "Formula" / "fallet.rb"
-        template = ROOT / "TapTemplate" / "Formula" / "fallet.rb"
-        self.assertEqual(source.read_bytes(), template.read_bytes())
-        _, url, tag, checksum = formula.fields(source)
+    def test_formula_layout_and_source_pin(self):
+        content, url, tag, checksum = formula.fields(FORMULA)
         self.assertEqual(url, f"{formula.SOURCE}{tag}.tar.gz")
         self.assertRegex(checksum, r"^[0-9a-f]{64}$")
-        self.assertIn('exec /usr/bin/open "#{opt_prefix}/Fallet.app"', source.read_text())
+        self.assertIn('prefix.install "dist/Fallet.app"', content)
+        self.assertIn('exec /usr/bin/open "#{opt_prefix}/Fallet.app"', content)
+        self.assertIn('bin.install "Scripts/fallet-app-link.py" => "fallet-app-link"', content)
+        self.assertNotIn("post_install", content)
+        self.assertFalse((ROOT / "TapTemplate" / "Formula" / "fallet.rb").exists())
 
-    def test_update_is_idempotent_and_checksum_is_verified(self):
+    def test_archive_checksum_url_and_idempotent_update(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "fallet.rb"
             archive = Path(folder) / "source.tar.gz"
-            path.write_bytes((ROOT / "Formula" / "fallet.rb").read_bytes())
+            fixture(path, "v1.2")
             archive.write_bytes(b"immutable source archive fixture")
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-            command = [sys.executable, str(ROOT / "Scripts" / "formula.py"),
-                       "update", str(path), "v1.10", digest, "--archive", str(archive)]
-            subprocess.run(command, check=True, capture_output=True, text=True)
+            command = ("update", path, "v1.3", digest, "--archive", archive)
+            self.assertEqual(run_formula(*command).returncode, 0)
             first = path.read_bytes()
-            subprocess.run(command, check=True, capture_output=True, text=True)
+            self.assertEqual(run_formula(*command).returncode, 0)
             self.assertEqual(path.read_bytes(), first)
             _, url, tag, checksum = formula.fields(path)
-            self.assertEqual(tag, "v1.10")
-            self.assertEqual(url, "https://github.com/Shinvitiya/Fallet/archive/refs/tags/v1.10.tar.gz")
-            self.assertEqual(checksum, digest)
+            self.assertEqual((tag, checksum), ("v1.3", digest))
+            self.assertEqual(url, f"{formula.SOURCE}v1.3.tar.gz")
+            self.assertEqual(run_formula("verify", path, "--archive", archive).returncode, 0)
             archive.write_bytes(b"different archive")
-            failed = subprocess.run([sys.executable, str(ROOT / "Scripts" / "formula.py"),
-                                     "verify", str(path), "--archive", str(archive)],
-                                    capture_output=True, text=True)
-            self.assertNotEqual(failed.returncode, 0)
+            self.assertNotEqual(run_formula("verify", path, "--archive", archive).returncode, 0)
+            archive.unlink()
+            self.assertNotEqual(run_formula("verify", path, "--archive", archive).returncode, 0)
 
-    def test_rejects_wrong_source_and_hash(self):
+    def test_invalid_versions_hashes_and_downgrades(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "fallet.rb"
-            text = (ROOT / "Formula" / "fallet.rb").read_text()
-            path.write_text(text.replace("https://github.com/Shinvitiya/Fallet", "https://example.com"))
+            fixture(path, "v1.3")
+            original = path.read_bytes()
+            for tag in ("v1.02", "v1", "1.4", "v1.4-beta", "v1.2"):
+                self.assertNotEqual(run_formula("update", path, tag, "b" * 64).returncode, 0)
+                self.assertEqual(path.read_bytes(), original)
+            for checksum in ("bad", "A" * 64, "", "b" * 63):
+                self.assertNotEqual(run_formula("update", path, "v1.4", checksum).returncode, 0)
+            self.assertNotEqual(run_formula("assert-upgrade", path, "v1.2").returncode, 0)
+            self.assertEqual(run_formula("assert-upgrade", path, "v1.3").returncode, 0)
+            self.assertEqual(run_formula("assert-upgrade", path, "v2.0").returncode, 0)
+            content = path.read_text()
+            path.write_text(content.replace("https://github.com/Shinvitiya/Fallet", "https://example.com"))
             with self.assertRaises(ValueError):
                 formula.fields(path)
-            path.write_text(text.replace('sha256 "', 'sha256 "bad'))
+            path.write_text(content.replace('sha256 "', 'sha256 "bad'))
             with self.assertRaises(ValueError):
                 formula.fields(path)
 
-    def test_formula_publication_updates_once_and_refuses_downgrade(self):
+    def test_bundle_version_must_match_release_tag(self):
+        with (ROOT / "Resources" / "Info.plist").open("rb") as stream:
+            info = plistlib.load(stream)
+        version = info["CFBundleShortVersionString"]
+        self.assertEqual(info["CFBundleVersion"], version)
+        check = [sys.executable, str(ROOT / "Scripts" / "version.py"), "check"]
+        self.assertEqual(subprocess.run(check + [f"v{version}"], capture_output=True).returncode, 0)
+        major = int(version.split(".")[0])
+        self.assertNotEqual(subprocess.run(check + [f"v{major + 1}.0"],
+                                           capture_output=True).returncode, 0)
+
+    def test_both_taps_idempotency_conflicts_and_external_failure(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            remote = root / "remote.rb"
-            remote.write_bytes((ROOT / "Formula" / "fallet.rb").read_bytes())
+            source = root / "source.rb"
+            tap = root / "tap.rb"
             proposed = root / "proposed.rb"
-            proposed.write_bytes(remote.read_bytes())
-            subprocess.run([sys.executable, str(ROOT / "Scripts" / "formula.py"), "update",
-                            str(proposed), "v1.6", "a" * 64], check=True, capture_output=True)
-
+            for path in (source, tap):
+                fixture(path, "v1.2")
+            fixture(proposed, "v1.3", "b" * 64)
             fake_bin = root / "bin"
             fake_bin.mkdir()
             fake_gh = fake_bin / "gh"
             fake_gh.write_text('''#!/usr/bin/env python3
 import base64
 import hashlib
+import json
 import os
 import pathlib
 import sys
 
 args = sys.argv[1:]
 assert args[0] == "api"
-remote = pathlib.Path(os.environ["FAKE_REMOTE_FORMULA"])
+endpoint = next(value for value in args[1:] if value.startswith("repos/"))
+repo = "/".join(endpoint.split("/")[1:3])
+assert repo in ("Shinvitiya/Fallet", "Shinvitiya/homebrew-fallet")
+remote = pathlib.Path(os.environ["FAKE_SOURCE" if repo == "Shinvitiya/Fallet" else "FAKE_TAP"])
+if repo == "Shinvitiya/homebrew-fallet" and os.environ.get("FAKE_FAIL_TAP") == "1":
+    raise SystemExit(42)
 if "--method" in args:
     fields = {}
     for index, value in enumerate(args):
@@ -90,8 +134,10 @@ if "--method" in args:
     assert fields["sha"] == hashlib.sha1(remote.read_bytes()).hexdigest()
     assert fields["branch"] == "main"
     remote.write_bytes(base64.b64decode(fields["content"]))
-    count = pathlib.Path(os.environ["FAKE_WRITE_COUNT"])
-    count.write_text(str(int(count.read_text()) + 1))
+    counts = pathlib.Path(os.environ["FAKE_COUNTS"])
+    values = json.loads(counts.read_text())
+    values[repo] += 1
+    counts.write_text(json.dumps(values))
 elif args[-2:] == ["--jq", ".content"]:
     print(base64.b64encode(remote.read_bytes()).decode())
 elif args[-2:] == ["--jq", ".sha"]:
@@ -100,32 +146,48 @@ else:
     raise SystemExit("unexpected gh command")
 ''')
             fake_gh.chmod(0o755)
-            writes = root / "writes.txt"
-            writes.write_text("0")
+            counts = root / "counts.json"
+            counts.write_text(json.dumps({"Shinvitiya/Fallet": 0,
+                                          "Shinvitiya/homebrew-fallet": 0}))
             env = os.environ.copy()
-            env.update(GH_TOKEN="test-token", FAKE_REMOTE_FORMULA=str(remote),
-                       FAKE_WRITE_COUNT=str(writes), PATH=f"{fake_bin}:{env['PATH']}")
-            publish = ["bash", str(ROOT / "Scripts" / "publish-formula.sh"),
-                       "Shinvitiya/homebrew-fallet", str(proposed), "v1.6"]
-            subprocess.run(publish, check=True, capture_output=True, env=env)
-            self.assertEqual(remote.read_bytes(), proposed.read_bytes())
-            subprocess.run(publish, check=True, capture_output=True, env=env)
-            self.assertEqual(writes.read_text(), "1")
+            env.update(GH_TOKEN="test-token", FAKE_SOURCE=str(source), FAKE_TAP=str(tap),
+                       FAKE_COUNTS=str(counts), PATH=f"{fake_bin}:{env['PATH']}")
 
-            remote.write_text(remote.read_text().replace("Floating file shelf", "Modified file shelf"))
-            conflict = subprocess.run(publish, capture_output=True, env=env)
-            self.assertNotEqual(conflict.returncode, 0)
-            self.assertEqual(writes.read_text(), "1")
+            def publish(repo: str, candidate: Path = proposed, tag: str = "v1.3",
+                        environment: dict[str, str] = env) -> subprocess.CompletedProcess[bytes]:
+                return subprocess.run(["bash", str(PUBLISH), repo, str(candidate), tag],
+                                      capture_output=True, env=environment)
 
-            old_formula = root / "old.rb"
-            old_formula.write_bytes((ROOT / "Formula" / "fallet.rb").read_bytes())
-            subprocess.run([sys.executable, str(ROOT / "Scripts" / "formula.py"), "update",
-                            str(old_formula), "v1.5", "b" * 64], check=True, capture_output=True)
-            downgrade = subprocess.run(["bash", str(ROOT / "Scripts" / "publish-formula.sh"),
-                                        "Shinvitiya/homebrew-fallet", str(old_formula), "v1.5"],
-                                       capture_output=True, env=env)
-            self.assertNotEqual(downgrade.returncode, 0)
-            self.assertEqual(writes.read_text(), "1")
+            self.assertEqual(publish("Shinvitiya/Fallet").returncode, 0)
+            self.assertEqual(publish("Shinvitiya/homebrew-fallet").returncode, 0)
+            self.assertEqual(source.read_bytes(), proposed.read_bytes())
+            self.assertEqual(tap.read_bytes(), proposed.read_bytes())
+            self.assertEqual(publish("Shinvitiya/Fallet").returncode, 0)
+            self.assertEqual(publish("Shinvitiya/homebrew-fallet").returncode, 0)
+            self.assertEqual(list(json.loads(counts.read_text()).values()), [1, 1])
+
+            tap.write_text(tap.read_text().replace("Floating file shelf", "Modified file shelf"))
+            self.assertNotEqual(publish("Shinvitiya/homebrew-fallet").returncode, 0)
+            self.assertEqual(json.loads(counts.read_text())["Shinvitiya/homebrew-fallet"], 1)
+
+            fixture(tap, "v1.4")
+            self.assertNotEqual(publish("Shinvitiya/homebrew-fallet").returncode, 0)
+            self.assertEqual(json.loads(counts.read_text())["Shinvitiya/homebrew-fallet"], 1)
+
+            fixture(tap, "v1.2")
+            failed_env = dict(env, FAKE_FAIL_TAP="1")
+            self.assertNotEqual(publish("Shinvitiya/homebrew-fallet",
+                                        environment=failed_env).returncode, 0)
+            self.assertEqual(formula.fields(tap)[2], "v1.2")
+
+    def test_workflow_orders_validation_tap_update_and_release(self):
+        workflow = (ROOT / ".github" / "workflows" / "homebrew-release.yml").read_text()
+        self.assertLess(workflow.index("needs: validate"), workflow.index("Update dedicated Homebrew tap"))
+        self.assertLess(workflow.index("Update dedicated Homebrew tap"),
+                        workflow.index("Publish stable release only after both formulas are available"))
+        self.assertIn('python3 Scripts/version.py check "$RELEASE_TAG"', workflow)
+        self.assertIn('python3 Scripts/formula.py verify "$FORMULA_PATH" --archive "$ARCHIVE_PATH"',
+                      workflow)
 
 
 if __name__ == "__main__":

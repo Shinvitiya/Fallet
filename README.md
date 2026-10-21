@@ -23,19 +23,31 @@ The shelf remembers regular contents and window position between launches; tempo
 
 ## Install with Homebrew
 
-The recommended install is one command, once the [dedicated Fallet tap](https://github.com/Shinvitiya/homebrew-fallet) has been published:
+Install from the [dedicated Fallet tap](https://github.com/Shinvitiya/homebrew-fallet):
 
 ```sh
 brew install Shinvitiya/fallet/fallet
+fallet-app-link link
 ```
 
-Then run `fallet` to open the app. Its icon appears in the menu bar; left-click to show or hide the shelf and right-click for Quit. The first install builds from source on your Mac, so you need Xcode Command Line Tools (`xcode-select --install`). The formula supports Apple silicon and Intel Macs on macOS 13 or later and keeps its launcher in Homebrew’s `bin` directory. The fully qualified install command automatically taps and trusts only this formula under [Homebrew’s third-party tap rules](https://docs.brew.sh/Tap-Trust).
+The second command creates `~/Applications/Fallet.app`, a shortcut to Homebrew's stable `opt/fallet/Fallet.app` path. Open it from Finder's user Applications folder, or run `fallet` in Terminal. Fallet then appears in the menu bar; left-click to show or hide the shelf and right-click for Quit. The shortcut survives Homebrew upgrades. If `~/Applications/Fallet.app` already contains another app or shortcut, the setup command preserves it and tells you about the conflict. It also requests Launch Services registration when available. Finder access works through the shortcut; Spotlight indexing can take time, and Launchpad visibility is not guaranteed.
 
-To update an installed copy, run `brew upgrade fallet`. Fallet checks for newer **stable, installable** releases in the background at launch and about once a day. If one is available, a small **New v…** badge appears beside its name. Click it for the release page or to copy the Homebrew upgrade command. No badge means the installed version is current or the check could not complete. You can also use `brew outdated fallet` in Terminal. Fallet never downloads or installs updates itself.
+The first install builds from source on your Mac, so you need Xcode Command Line Tools (`xcode-select --install`). The formula supports Apple silicon and Intel Macs on macOS 13 or later and keeps its launcher in Homebrew’s `bin` directory. The fully qualified install command automatically taps and trusts only this formula under [Homebrew’s third-party tap rules](https://docs.brew.sh/Tap-Trust).
+
+To update an installed copy, quit Fallet and run `brew upgrade fallet`, then launch it from Finder or with `fallet`. The Applications shortcut continues to point to the new version. Fallet checks GitHub's latest stable release and the dedicated tap formula in the background at launch and about once a day. If a newer release is present in the tap, a small **New v…** badge appears beside its name. Homebrew installs offer a button to copy `brew upgrade fallet`; source-built copies show the release page instead. A failed network or tap check retries later, without delaying startup. Fallet never downloads or installs updates itself.
+
+To uninstall, remove only Fallet's managed shortcut before removing the formula:
+
+```sh
+fallet-app-link unlink
+brew uninstall Shinvitiya/fallet/fallet
+```
+
+`fallet-app-link status` shows whether this shortcut is installed. Unlinking preserves the Homebrew app and any other file at that path. Shelf data in `~/Library/Application Support/Fallet/` is left in place so you can reinstall later.
 
 Older installations made with `brew tap Shinvitiya/fallet https://github.com/Shinvitiya/Fallet.git` can keep using `brew upgrade fallet`: the release workflow updates that original formula as well. To switch the existing tap to the dedicated repository without uninstalling Fallet, run `brew tap --custom-remote Shinvitiya/fallet https://github.com/Shinvitiya/homebrew-fallet.git`, then `brew update`. Shelf data stays in `~/Library/Application Support/Fallet/`.
 
-Homebrew keeps this source-built app in its Cellar, not Applications. If you previously launched a separate `/Applications/Fallet.app`, quit that copy before using `fallet` so only one instance runs. No Apple Developer ID or notarization is required for the local source build, and there is no public ad-hoc signed DMG. Depending on your Mac’s security settings, macOS may still ask you to approve a locally built app; Fallet does not ask you to disable Gatekeeper globally. See [RELEASING.md](RELEASING.md) for how releases become available.
+Homebrew keeps the source-built app in its Cellar, and the optional `~/Applications` entry points to it. If you previously launched a separate `/Applications/Fallet.app`, quit that copy before using the Homebrew version so only one instance runs. No Apple Developer ID or notarization is required for the local source build, and there is no public ad-hoc signed DMG. Depending on your Mac’s security settings, macOS may still ask you to approve a locally built app; Fallet does not ask you to disable Gatekeeper globally. See [RELEASING.md](RELEASING.md) for how releases become available.
 
 ## Quick demo
 

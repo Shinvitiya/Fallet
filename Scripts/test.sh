@@ -32,3 +32,4 @@ for suite in ClipboardDragTests UpdateCheckerTests; do
 done
 
 python3 Tests/FormulaTests.py
+python3 Tests/AppLinkTests.py

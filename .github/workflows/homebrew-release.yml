@@ -42,6 +42,11 @@ jobs:
       - name: Run offline tests
         run: zsh Scripts/test.sh
 
+      - name: Validate Homebrew formula syntax
+        run: |
+          ruby -c Formula/fallet.rb
+          python3 Scripts/formula.py verify Formula/fallet.rb
+
       - name: Build universal ad-hoc signed app
         run: zsh build.sh
 

@@ -13,6 +13,11 @@ URL_LINE = re.compile(r'^  url "(https://github\.com/Shinvitiya/Fallet/archive/r
 SHA_LINE = re.compile(r'^  sha256 "([0-9a-f]{64})"$', re.M)
 
 
+def version(tag: str) -> tuple[int, int, int]:
+    parts = tuple(map(int, tag.removeprefix("source-v").removeprefix("v").split(".")))
+    return (parts + (0, 0, 0))[:3]
+
+
 def fields(path: Path) -> tuple[str, str, str, str]:
     content = path.read_text()
     urls = URL_LINE.findall(content)
@@ -37,6 +42,8 @@ def main() -> None:
             parser.error("update needs a release tag such as v1.6")
         if not args.checksum or not SHA.fullmatch(args.checksum):
             parser.error("update needs a lowercase 64-character SHA-256")
+        if version(tag) > version(args.tag):
+            parser.error(f"refusing to replace newer formula {tag} with {args.tag}")
         content = content.replace(f'  url "{url}"', f'  url "{SOURCE}{args.tag}.tar.gz"')
         content = content.replace(f'  sha256 "{checksum}"', f'  sha256 "{args.checksum}"')
         args.formula.write_text(content)
@@ -44,9 +51,7 @@ def main() -> None:
     elif args.command == "assert-upgrade":
         if not args.tag or not args.tag.startswith("v") or not TAG.fullmatch(args.tag):
             parser.error("assert-upgrade needs a release tag such as v1.6")
-        old = tuple(map(int, tag.removeprefix("source-v").removeprefix("v").split(".")))
-        new = tuple(map(int, args.tag[1:].split(".")))
-        if (old + (0,) * (3 - len(old))) > (new + (0,) * (3 - len(new))):
+        if version(tag) > version(args.tag):
             parser.error(f"refusing to replace newer formula {tag} with {args.tag}")
         if args.checksum:
             parser.error("assert-upgrade accepts no checksum")

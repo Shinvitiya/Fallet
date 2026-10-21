@@ -4,7 +4,8 @@ private final class UpdateNoticeView: NSView {
     private let onViewRelease: () -> Void
     private let copyButton: GlassPillButton
 
-    init(update: AvailableUpdate, onViewRelease: @escaping () -> Void) {
+    init(update: AvailableUpdate, homebrewInstalled: Bool,
+         onViewRelease: @escaping () -> Void) {
         self.onViewRelease = onViewRelease
         copyButton = GlassPillButton(frame: NSRect(x: 165, y: 17, width: 139, height: 34),
                                       title: "Copy command", symbol: "doc.on.doc")
@@ -34,23 +35,28 @@ private final class UpdateNoticeView: NSView {
         addSubview(Self.label("Installed version: v\(update.installedVersion)",
                               frame: NSRect(x: 17, y: 108, width: 285, height: 17), size: 10,
                               color: ShelfGlassStyle.secondaryText))
-        addSubview(Self.label("Homebrew: brew upgrade fallet",
+        addSubview(Self.label(homebrewInstalled ? "Homebrew: brew upgrade fallet"
+                                               : "This copy was built outside Homebrew.",
                               frame: NSRect(x: 17, y: 82, width: 285, height: 18), size: 10,
                               color: ShelfGlassStyle.secondaryText))
-        addSubview(Self.label("Other installs: view release details on GitHub.",
+        addSubview(Self.label(homebrewInstalled ? "Quit Fallet before launching the upgraded copy."
+                                               : "View the release for build instructions.",
                               frame: NSRect(x: 17, y: 64, width: 285, height: 18), size: 10,
                               color: ShelfGlassStyle.secondaryText))
 
         let releaseButton = GlassPillButton(frame: NSRect(x: 14, y: 17, width: 143, height: 34),
                                             title: "View release", symbol: "arrow.up.right.square")
+        if !homebrewInstalled { releaseButton.frame.size.width = 290 }
         releaseButton.target = self
         releaseButton.action = #selector(viewRelease)
         addSubview(releaseButton)
-        copyButton.target = self
-        copyButton.action = #selector(copyCommand)
-        copyButton.toolTip = "Copy update command"
-        copyButton.setAccessibilityLabel("Copy update command: brew upgrade fallet")
-        addSubview(copyButton)
+        if homebrewInstalled {
+            copyButton.target = self
+            copyButton.action = #selector(copyCommand)
+            copyButton.toolTip = "Copy update command"
+            copyButton.setAccessibilityLabel("Copy update command: brew upgrade fallet")
+            addSubview(copyButton)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -85,7 +91,8 @@ final class UpdatePopover {
         popover.animates = !ShelfGlassStyle.reduceMotion
         popover.appearance = NSAppearance(named: .darkAqua)
         let controller = NSViewController()
-        controller.view = UpdateNoticeView(update: update) { [weak popover] in
+        controller.view = UpdateNoticeView(update: update,
+                                           homebrewInstalled: FalletInstallation.isHomebrewBundle(Bundle.main.bundleURL)) { [weak popover] in
             popover?.close()
             NSWorkspace.shared.open(update.release.url)
         }

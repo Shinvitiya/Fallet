@@ -10,6 +10,8 @@ class Fallet < Formula
   def install
     system "zsh", "build.sh"
     prefix.install "dist/Fallet.app"
+    bin.install "Scripts/fallet-app-link.py" => "fallet-app-link"
+    (bin/"fallet-app-link").chmod 0755
 
     launcher = bin/"fallet"
     launcher.write <<~SH
@@ -23,12 +25,16 @@ class Fallet < Formula
     <<~EOS
       Fallet was built locally from source. Launch it with:
         fallet
-      Its icon then appears in the menu bar.
+      To add a Finder Applications shortcut, run:
+        fallet-app-link link
+      Its icon then appears in the menu bar. Before uninstalling, run:
+        fallet-app-link unlink
     EOS
   end
 
   test do
     assert_path_exists prefix/"Fallet.app/Contents/MacOS/Fallet"
+    assert_path_exists bin/"fallet-app-link"
     system "codesign", "--verify", "--deep", "--strict", prefix/"Fallet.app"
   end
 end

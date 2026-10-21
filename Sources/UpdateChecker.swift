@@ -47,13 +47,24 @@ struct AvailableUpdate: Equatable {
     let release: FalletRelease
 }
 
+enum FalletInstallation {
+    static func isHomebrewBundle(_ url: URL) -> Bool {
+        let parts = url.resolvingSymlinksInPath().pathComponents
+        guard parts.count >= 4 else { return false }
+        let tail = Array(parts.suffix(4))
+        return tail[0] == "Cellar" && tail[1] == "fallet" && tail[3] == "Fallet.app"
+    }
+}
+
 enum ReleaseCheckError: Error {
     case invalidResponse
     case httpStatus(Int)
+    case tapNotReady
 }
 
 final class GitHubReleaseClient {
     static let endpoint = URL(string: "https://api.github.com/repos/Shinvitiya/Fallet/releases/latest")!
+    static let tapEndpoint = URL(string: "https://raw.githubusercontent.com/Shinvitiya/homebrew-fallet/main/Formula/fallet.rb")!
     private let session: URLSession
 
     init(session: URLSession = .shared) { self.session = session }
@@ -61,17 +72,59 @@ final class GitHubReleaseClient {
     func fetchLatest(_ completion: @escaping (Result<FalletRelease?, Error>) -> Void) {
         var request = URLRequest(url: Self.endpoint)
         request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("Fallet-update-checker", forHTTPHeaderField: "User-Agent")
         session.dataTask(with: request) { data, response, error in
             if let error { completion(.failure(error)); return }
             do {
-                completion(.success(try Self.parse(data: data, response: response)))
+                guard let release = try Self.parse(data: data, response: response) else {
+                    completion(.success(nil))
+                    return
+                }
+                self.checkTap(for: release, completion: completion)
             } catch {
                 completion(.failure(error))
             }
         }.resume()
+    }
+
+    private func checkTap(for release: FalletRelease,
+                          completion: @escaping (Result<FalletRelease?, Error>) -> Void) {
+        var request = URLRequest(url: Self.tapEndpoint)
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("Fallet-update-checker", forHTTPHeaderField: "User-Agent")
+        session.dataTask(with: request) { data, response, error in
+            if let error { completion(.failure(error)); return }
+            do {
+                try Self.verifyTap(data: data, response: response, release: release)
+                completion(.success(release))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    static func verifyTap(data: Data?, response: URLResponse?, release: FalletRelease) throws {
+        guard let response = response as? HTTPURLResponse else { throw ReleaseCheckError.invalidResponse }
+        guard response.statusCode == 200 else { throw ReleaseCheckError.httpStatus(response.statusCode) }
+        guard let data, data.count <= 64_000, let content = String(data: data, encoding: .utf8) else {
+            throw ReleaseCheckError.invalidResponse
+        }
+        let tag = release.url.lastPathComponent
+        let expectedURL = "  url \"https://github.com/Shinvitiya/Fallet/archive/refs/tags/\(tag).tar.gz\""
+        let urls = content.split(separator: "\n").filter { $0.hasPrefix("  url \"") }
+        let hashes = content.split(separator: "\n").filter { $0.hasPrefix("  sha256 \"") }
+        guard urls.count == 1, urls[0] == expectedURL, hashes.count == 1 else {
+            throw ReleaseCheckError.tapNotReady
+        }
+        let checksum = hashes[0].dropFirst("  sha256 \"".count).dropLast()
+        guard hashes[0].hasSuffix("\""), checksum.count == 64,
+              checksum.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+            throw ReleaseCheckError.tapNotReady
+        }
     }
 
     static func parse(data: Data?, response: URLResponse?) throws -> FalletRelease? {

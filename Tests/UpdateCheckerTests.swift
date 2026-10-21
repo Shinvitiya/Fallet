@@ -30,6 +30,40 @@ struct UpdateCheckerTests {
         expectParseFailure { try GitHubReleaseClient.parse(data: Data(), response: response(403)) }
         expectParseFailure { try GitHubReleaseClient.parse(data: Data(), response: response(500)) }
         expectParseFailure { try GitHubReleaseClient.parse(data: nil, response: nil) }
+        let readyFormula = """
+        class Fallet < Formula
+          url "https://github.com/Shinvitiya/Fallet/archive/refs/tags/v1.10.1.tar.gz"
+          sha256 "\(String(repeating: "a", count: 64))"
+        end
+        """
+        try GitHubReleaseClient.verifyTap(data: Data(readyFormula.utf8),
+                                          response: tapResponse(200), release: stable)
+        expectParseFailure {
+            try GitHubReleaseClient.verifyTap(data: Data(readyFormula.replacingOccurrences(
+                of: "v1.10.1.tar.gz", with: "v1.10.tar.gz").utf8),
+                response: tapResponse(200), release: stable)
+        }
+        expectParseFailure {
+            try GitHubReleaseClient.verifyTap(data: Data(readyFormula.replacingOccurrences(
+                of: String(repeating: "a", count: 64), with: "bad").utf8),
+                response: tapResponse(200), release: stable)
+        }
+        expectParseFailure {
+            try GitHubReleaseClient.verifyTap(data: Data(readyFormula.utf8),
+                response: tapResponse(404), release: stable)
+        }
+        let releaseJSON = try JSONSerialization.data(withJSONObject: [
+            "tag_name": "v1.10.1", "html_url": stable.url.absoluteString,
+            "draft": false, "prerelease": false
+        ] as [String: Any])
+        guard case .failure = fetchWithStub(release: releaseJSON,
+                                             tap: Data(readyFormula.replacingOccurrences(
+                                                of: "v1.10.1.tar.gz", with: "v1.10.tar.gz").utf8)),
+              case .success(let fetched) = fetchWithStub(release: releaseJSON,
+                                                          tap: Data(readyFormula.utf8)),
+              fetched == stable else {
+            fatalError("The update client must wait until the Homebrew tap advertises the release")
+        }
 
         let suiteName = "FalletUpdateCheckerTests-\(UUID())"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -93,6 +127,17 @@ struct UpdateCheckerTests {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("FalletUpdateView-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+        let brewedBundle = root.appendingPathComponent("Cellar/fallet/1.10.1/Fallet.app")
+        try FileManager.default.createDirectory(at: brewedBundle, withIntermediateDirectories: true)
+        let linkedBundle = root.appendingPathComponent("Applications/Fallet.app")
+        try FileManager.default.createDirectory(at: linkedBundle.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: linkedBundle, withDestinationURL: brewedBundle)
+        guard FalletInstallation.isHomebrewBundle(brewedBundle),
+              FalletInstallation.isHomebrewBundle(linkedBundle),
+              !FalletInstallation.isHomebrewBundle(root.appendingPathComponent("Other/Fallet.app")) else {
+            fatalError("The update action must recognize only Homebrew-managed app bundles")
+        }
         let file = root.appendingPathComponent("test.txt")
         try Data("drag test".utf8).write(to: file)
         let store = ShelfStore(storageURL: root.appendingPathComponent("shelf.json"))
@@ -126,6 +171,30 @@ struct UpdateCheckerTests {
                         httpVersion: nil, headerFields: nil)!
     }
 
+    private static func tapResponse(_ status: Int) -> HTTPURLResponse {
+        HTTPURLResponse(url: GitHubReleaseClient.tapEndpoint, statusCode: status,
+                        httpVersion: nil, headerFields: nil)!
+    }
+
+    private static func fetchWithStub(release: Data, tap: Data) -> Result<FalletRelease?, Error> {
+        StubReleaseProtocol.releaseData = release
+        StubReleaseProtocol.tapData = tap
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubReleaseProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let finished = DispatchSemaphore(value: 0)
+        var received: Result<FalletRelease?, Error>?
+        GitHubReleaseClient(session: session).fetchLatest { result in
+            received = result
+            finished.signal()
+        }
+        guard finished.wait(timeout: .now() + 5) == .success, let received else {
+            fatalError("Stubbed release request timed out")
+        }
+        return received
+    }
+
     private static func parse(tag: String, draft: Bool = false, prerelease: Bool = false,
                               releaseURL: String? = nil) throws -> FalletRelease? {
         let url = releaseURL ?? "https://github.com/Shinvitiya/Fallet/releases/tag/\(tag)"
@@ -147,4 +216,27 @@ struct UpdateCheckerTests {
         }
         guard condition() else { fatalError("Asynchronous update did not finish") }
     }
+}
+
+private final class StubReleaseProtocol: URLProtocol {
+    static var releaseData = Data()
+    static var tapData = Data()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url == GitHubReleaseClient.endpoint || request.url == GitHubReleaseClient.tapEndpoint
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url else { return }
+        let body = url == GitHubReleaseClient.endpoint ? Self.releaseData : Self.tapData
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                       headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() { }
 }
